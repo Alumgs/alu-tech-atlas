@@ -1,0 +1,9 @@
+{
+  "name": "technology-atlas-v2",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "refresh": "node scripts/update-feed.mjs"
+  },
+  "engines": {"node": ">=20"}
+}

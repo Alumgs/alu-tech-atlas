@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="description" content="知域 Technology Atlas：AIDC、具身智能与机器学习的系统知识地图、案例实验室与每日技术情报。" />
+  <title>知域 · Technology Atlas</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Noto+Sans+SC:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+  <div class="noise"></div>
+  <header class="site-header">
+    <a class="brand" href="./?domain=home&view=today" aria-label="Technology Atlas 首页">
+      <span class="brand-mark">A</span>
+      <span><b>知域</b><small>TECHNOLOGY ATLAS</small></span>
+    </a>
+    <nav class="domain-nav" aria-label="一级领域">
+      <button data-domain="home">今日</button>
+      <button data-domain="aidc">AIDC 智算中心</button>
+      <button data-domain="embodied">具身智能</button>
+      <button data-domain="ml">机器学习</button>
+    </nav>
+    <div class="header-actions">
+      <button id="searchBtn" class="icon-btn" aria-label="搜索">⌕</button>
+      <button id="themeBtn" class="icon-btn" aria-label="切换主题">◐</button>
+    </div>
+  </header>
+
+  <main id="app" class="app-shell" aria-live="polite"></main>
+
+  <footer class="site-footer">
+    <div>
+      <strong>知域 · Technology Atlas</strong>
+      <span>专业知识 · 可靠来源 · 持续观察</span>
+    </div>
+    <div class="footer-meta">
+      <span id="footerUpdated">内容核验：—</span>
+      <span>动态栏目由 GitHub Actions 每日刷新</span>
+    </div>
+  </footer>
+
+  <dialog id="searchDialog" class="search-dialog">
+    <form method="dialog" class="dialog-head">
+      <strong>全站搜索</strong>
+      <button aria-label="关闭">×</button>
+    </form>
+    <input id="globalSearch" type="search" placeholder="搜索知识、公司、技术、案例……" autocomplete="off" />
+    <div id="searchResults" class="search-results"></div>
+  </dialog>
+
+  <script src="./data/content.js"></script>
+  <script src="./app.js" defer></script>
+</body>
+</html>
