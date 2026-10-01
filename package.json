@@ -1,9 +1,11 @@
 {
-  "name": "technology-atlas-v2",
+  "name": "technology-atlas-v3",
   "private": true,
   "type": "module",
   "scripts": {
     "refresh": "node scripts/update-feed.mjs"
   },
-  "engines": {"node": ">=20"}
+  "engines": {
+    "node": ">=20"
+  }
 }
