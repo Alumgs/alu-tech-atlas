@@ -3,7 +3,7 @@ if(!base)throw Error('ATLAS_BASE_URL is required');
 const origin=new URL(base).origin;
 const request=(path,init={})=>fetch(new URL(path,base),{redirect:'manual',...init});
 const must=(condition,message)=>{if(!condition)throw Error(message);};
-const health=await request('/api/health');const info=await health.json();must(info.ok&&info.authConfigured&&info.version==='4.0.0','health or auth configuration failed');
+let info;for(let attempt=1;attempt<=6;attempt++){const health=await request('/api/health?smoke='+Date.now());const contentType=health.headers.get('content-type')||'';if(health.status===200&&contentType.includes('application/json')){info=await health.json();break;}if(attempt===6)throw Error('health endpoint invalid: status='+health.status+', content-type='+contentType+', location='+String(health.headers.get('location')));await new Promise(r=>setTimeout(r,1500));}must(info?.ok&&info?.authConfigured&&info?.version==='4.0.0','health or auth configuration failed');
 for(const path of ['/','/case-study','/read/a04','/aidc.jpg']){const r=await request(path);must(r.status===302&&r.headers.get('location')?.startsWith('/auth/login'),'anonymous path is not protected: '+path);}
 for(const path of ['/api/updates?source=0','/api/indicators']){must((await request(path)).status===401,'anonymous API not protected: '+path);}
 const csrf=await request('/auth/login',{method:'POST',headers:{Origin:'https://invalid.example','Content-Type':'application/x-www-form-urlencoded'},body:'password=invalid'});must(csrf.status===403,'cross-origin login accepted');
