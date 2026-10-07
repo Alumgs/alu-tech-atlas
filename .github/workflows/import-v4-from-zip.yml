@@ -1,0 +1,93 @@
+name: One-time V4 source import
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'Alu_Tech_Atlas_V4_GitHub_Ready.zip'
+      - '.github/workflows/import-v4-from-zip.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: write
+
+concurrency:
+  group: atlas-v4-import
+  cancel-in-progress: false
+
+jobs:
+  migrate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout current main
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          persist-credentials: true
+
+      - name: Verify V4 archive
+        env:
+          EXPECTED_SHA256: 5c4e02f21cad81a142ac72d732f4a7b046b50fc04798f9fc9d37496dc772c9b2
+        run: |
+          set -euo pipefail
+          test -f Alu_Tech_Atlas_V4_GitHub_Ready.zip
+          printf '%s  %s\n' "$EXPECTED_SHA256" Alu_Tech_Atlas_V4_GitHub_Ready.zip | sha256sum -c -
+
+      - name: Extract V4 source
+        run: |
+          set -euo pipefail
+          rm -rf /tmp/atlas-v4
+          mkdir -p /tmp/atlas-v4
+          unzip -q Alu_Tech_Atlas_V4_GitHub_Ready.zip -d /tmp/atlas-v4
+          test -f /tmp/atlas-v4/package.json
+          test -f /tmp/atlas-v4/pnpm-lock.yaml
+          test -f /tmp/atlas-v4/wrangler.jsonc
+          test -f /tmp/atlas-v4/worker/index.ts
+          test -f /tmp/atlas-v4/.github/workflows/cloudflare.yml
+
+      - name: Replace V3 tree with V4 tree
+        run: |
+          set -euo pipefail
+          git ls-files -z | xargs -0 -r git rm -f
+          cp -a /tmp/atlas-v4/. .
+          rm -rf /tmp/atlas-v4
+          rm -f Alu_Tech_Atlas_V4_GitHub_Ready.zip
+          rm -f .github/workflows/import-v4-from-zip.yml
+
+      - name: Verify V4 source and V3 cleanup
+        run: |
+          set -euo pipefail
+          test -f package.json
+          test -f pnpm-lock.yaml
+          test -f wrangler.jsonc
+          test -f worker/index.ts
+          test -f .github/workflows/cloudflare.yml
+          test ! -e index.html
+          test ! -e app.js
+          test ! -e styles.css
+          test ! -e 404.html
+          test ! -e MANUAL_DEPLOY_GUIDE.md
+          test ! -e .github/workflows/main.yml
+          test ! -e Alu_Tech_Atlas_V4_GitHub_Ready.zip
+
+      - name: Commit V4 migration
+        run: |
+          set -euo pipefail
+          git add -A
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "Migrate Technology Atlas V4 to Cloudflare Workers"
+          git push origin HEAD:main
+
+      - name: Trigger Cloudflare deployment
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          curl --fail-with-body --retry 3 -X POST \
+            -H "Authorization: Bearer $GITHUB_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/workflows/cloudflare.yml/dispatches" \
+            -d '{"ref":"main"}'
