@@ -1,0 +1,12 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {pbkdf2Sync} from 'node:crypto';
+import {configured,verifyPassword,issueSession,validSession,getCookie,sessionCookie,safeReturn,sameOrigin} from '../worker/auth.ts';
+const password='test-only-not-a-real-password';const salt='0123456789abcdef0123456789abcdef';
+const env={ATLAS_PASSWORD_HASH:'pbkdf2-sha256$100000$'+salt+'$'+pbkdf2Sync(password,Buffer.from(salt,'hex'),100000,32,'sha256').toString('hex'),ATLAS_SESSION_SECRET:'test-only-session-secret-never-used-in-production'};
+test('missing secrets fail closed',()=>{assert.equal(configured({}),false);assert.equal(configured({...env,ATLAS_SESSION_SECRET:'short'}),false);assert.equal(configured(env),true);});
+test('password verifier rejects incorrect passwords',async()=>{assert.equal(await verifyPassword(password,env.ATLAS_PASSWORD_HASH),true);assert.equal(await verifyPassword('wrong',env.ATLAS_PASSWORD_HASH),false);});
+test('signed sessions reject tampering, expiry and rotated credentials',async()=>{const now=1791330000000;const token=await issueSession(env,now);assert.equal(await validSession(token,env,now),true);assert.equal(await validSession(token+'0',env,now),false);assert.equal(await validSession(token,env,now+13*3600000),false);assert.equal(await validSession(token,{...env,ATLAS_SESSION_SECRET:env.ATLAS_SESSION_SECRET+'changed'},now),false);assert.equal(await validSession(token,{...env,ATLAS_PASSWORD_HASH:env.ATLAS_PASSWORD_HASH.replace(salt,'ffffffffffffffffffffffffffffffff')},now),false);});
+test('return URLs cannot leave the site',()=>{for(const p of ['https://evil.test','//evil.test','/\\evil.test','/\nabc','/auth/login'])assert.equal(safeReturn(p),'/');assert.equal(safeReturn('/?domain=robot&view=news'),'/?domain=robot&view=news');});
+test('login and logout require same-origin POST',()=>{assert.equal(sameOrigin(new Request('https://atlas.test/auth/login',{headers:{Origin:'https://evil.test'}})),false);assert.equal(sameOrigin(new Request('https://atlas.test/auth/login',{headers:{Origin:'https://atlas.test'}})),true);assert.equal(sameOrigin(new Request('https://atlas.test/auth/login')),false);});
+test('cookie is secure, host-only and HttpOnly',()=>{const cookie=sessionCookie('abc');assert.match(cookie,/^__Host-/);for(const marker of ['Secure','HttpOnly','SameSite=Strict','Path=/'])assert.ok(cookie.includes(marker));assert.equal(getCookie(new Request('https://atlas.test',{headers:{Cookie:'other=bad; __Host-atlas_session=abc'}})),'abc');});

@@ -1,0 +1,3 @@
+# Generate a password verifier with: npm run setup:password
+ATLAS_PASSWORD_HASH=
+ATLAS_SESSION_SECRET=

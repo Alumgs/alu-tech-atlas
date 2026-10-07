@@ -1,0 +1,5 @@
+Homepage image: CERN Server 03.jpg, photographed 25 February 2009 by Florian Hirzinger (www.fh-ap.com).
+Source: https://commons.wikimedia.org/wiki/File:CERN_Server_03.jpg
+License: Creative Commons Attribution-ShareAlike 3.0 Unported https://creativecommons.org/licenses/by-sa/3.0/
+Displayed with CSS cropping and a dark gradient overlay. Any adaptation of this image is distributed under the same CC BY-SA 3.0 license.
+This historical image illustrates a server room, not a specific modern liquid-cooled AIDC installation.

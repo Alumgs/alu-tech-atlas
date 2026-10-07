@@ -1,0 +1,6 @@
+export const research=[
+ {name:'Cosmos 3',date:'2026-05-31',role:'多模态物理 AI 基础模型',text:'官方发布将推理、世界生成与动作预测纳入同一模型家族。工程评估仍需区分产品发布、可下载模型和特定机器人闭环效果。',url:'https://nvidianews.nvidia.com/news/nvidia-launches-cosmos-3-the-open-frontier-foundation-model-for-physical-ai'},
+ {name:'V-JEPA 2.1 / 2-AC',date:'2026-03-16（2.1）',role:'潜在表征与动作条件预测',text:'2.1 更新密集特征的训练方法与时序一致性；2-AC 是动作条件机器人规划路线。表征升级不等于所有控制能力同步升级，应分别核对。',url:'https://github.com/facebookresearch/vjepa2'},
+ {name:'Genie 3 / Project Genie',date:'2025-08-05（研究发布）',role:'可交互环境生成',text:'从世界生成与交互一致性角度探索环境模型。可用于研究与场景想象，但逼真视频并不构成经过校准的接触力学模拟器。后续产品进展见官方页面。',url:'https://deepmind.google/blog/genie-3-a-new-frontier-for-world-models/'},
+];
+export function WorldResearch(){return <section className="world-research"><div className="section-heading"><h2>世界模型 · 研究路线观察</h2><span>资料核验 2026-10-01</span></div><p>以下为有日期的研究快照。最新论文、产品与市场报道由专题动态每日联网检查，保留原始发布日期。</p><div className="research-grid">{research.map(r=><a href={r.url} key={r.name} target="_blank" rel="noreferrer"><small>{r.date}</small><h3>{r.name}</h3><b>{r.role}</b><p>{r.text}</p><span>研究机构原文</span></a>)}</div><a className="case-inline" href="/?domain=robot&view=news&topic=world">查看世界模型最新论文与产业动态</a></section>}
