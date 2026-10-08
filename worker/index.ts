@@ -46,9 +46,13 @@ export default {
   }else if(!await validSession(getCookie(request),env)){
    result=path.startsWith('/api/')?Response.json({error:'请先登录',login:'/auth/login'},{status:401}):new Response(null,{status:302,headers:{Location:'/auth/login?returnTo='+encodeURIComponent(safeReturn(path+url.search))}});
   }else{
-   if(path.startsWith('/api/')&&!await env.FEED_LIMITER.limit({key:'atlas-feed:'+getCookie(request).slice(0,48)}).then(r=>r.success))return protect(Response.json({error:'请求频率过高，请稍后重试'},{status:429,headers:{'Retry-After':'60'}}));
-   // Asset requests also pass through this gate. Do not expose static data or RSC modules before login.
-   result=await handler.fetch(request,env,ctx);
+   if(path.startsWith('/_next/static/')||path==='/favicon.svg'){
+    result=await env.ASSETS.fetch(request);
+   }else if(path.startsWith('/api/')&&!await env.FEED_LIMITER.limit({key:'atlas-feed:'+getCookie(request).slice(0,48)}).then(r=>r.success)){
+    result=Response.json({error:'请求频率过高，请稍后重试'},{status:429,headers:{'Retry-After':'60'}});
+   }else{
+    result=await handler.fetch(request,env,ctx);
+   }
   }
   return protect(result);
  }
