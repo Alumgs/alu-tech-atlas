@@ -1,6 +1,6 @@
 'use client';
 import {useEffect,useMemo,useState} from 'react';
-import {ArrowDownWideNarrow,ArrowUpRight,Check,Download,Filter,RefreshCw,Sparkles,Star,Trash2} from 'lucide-react';
+import {ArrowDownWideNarrow,ArrowUpRight,Check,Download,Filter,Sparkles,Star,Trash2} from 'lucide-react';
 import type {Domain,News} from '@/lib/content';
 import {rankNews,scoreNews,scoreReasons} from '@/lib/editorial';
 
