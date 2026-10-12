@@ -64,13 +64,13 @@ async function adminApi(request:Request,env:Env,authEnv:AuthEnv){
   try{
    await kv.put('auth-password-hash',await hashPassword(next));
    await kv.put('auth-session-secret',randomSecret());
-   return json({ok:true,reauthenticate:true},{'Set-Cookie':sessionCookie('',0)});
+   return json({ok:true,reauthenticate:true},200,{'Set-Cookie':sessionCookie('',0)});
   }catch{return json({error:'密码保存失败，请稍后重试。'},503);}
  }
  if(path==='/api/admin/logout-all'){
   try{
    await kv.put('auth-session-secret',randomSecret());
-   return json({ok:true},{'Set-Cookie':sessionCookie('',0)});
+   return json({ok:true},200,{'Set-Cookie':sessionCookie('',0)});
   }catch{return json({error:'会话撤销失败，请稍后重试。'},503);}
  }
  return json({error:'未知管理接口。'},404);
@@ -110,7 +110,8 @@ export default {
    result=path.startsWith('/api/')?Response.json({error:'请先登录',login:'/auth/login'},{status:401}):new Response(null,{status:302,headers:{Location:'/auth/login?returnTo='+encodeURIComponent(safeReturn(path+url.search))}});
   }else{
    if(path.startsWith('/api/admin/')){
-    result=await adminApi(request,env,authEnv);
+    const limited=await env.FEED_LIMITER.limit({key:'atlas-admin:'+getCookie(request).slice(0,48)});
+    result=limited.success?await adminApi(request,env,authEnv):json({error:'请求频率过高，请稍后重试。'},429,{'Retry-After':'60'});
    }else if(path.startsWith('/_next/static/')||path==='/favicon.svg'){
     result=await env.ASSETS.fetch(request);
    }else if(path.startsWith('/api/')&&!await env.FEED_LIMITER.limit({key:'atlas-feed:'+getCookie(request).slice(0,48)}).then(r=>r.success)){
