@@ -111,7 +111,7 @@ export function EditorialDesk({domain,domainName,items,scopeLabel,editionType}:E
           method:'POST',
           headers:{'Content-Type':'application/json'},
           body:JSON.stringify({domain,editionType,items:selectedItems.map(n=>({url:n.url,title:n.title,date:n.date,source:n.source,type:n.type,summary:(n.summary||'').slice(0,450),language:n.language||''}))}),
-          signal:AbortSignal.timeout(30000)
+          signal:AbortSignal.timeout(45000)
         });
         if(response.status===401){
           window.location.assign('/auth/login?returnTo='+encodeURIComponent(location.pathname+location.search));
@@ -130,7 +130,7 @@ export function EditorialDesk({domain,domainName,items,scopeLabel,editionType}:E
         }
       }catch(e){
         enrichmentNotice=(e instanceof Error&&e.name==='TimeoutError')
-          ?'新闻网页增强超时，已使用现有摘要生成文档。'
+          ?'新闻网页增强超过 45 秒，已使用现有摘要生成文档。'
           :'新闻网页增强服务暂不可用，已使用现有摘要生成文档。';
       }
       const {downloadWechatDocx}=await import('@/lib/wechat-docx');
