@@ -3,9 +3,9 @@ if(!base)throw Error('ATLAS_BASE_URL is required');
 const origin=new URL(base).origin;
 const request=(path,init={})=>fetch(new URL(path,base),{redirect:'manual',...init});
 const must=(condition,message)=>{if(!condition)throw Error(message);};
-let info;for(let attempt=1;attempt<=6;attempt++){const health=await request('/api/health?smoke='+Date.now());const contentType=health.headers.get('content-type')||'';if(health.status===200&&contentType.includes('application/json')){info=await health.json();break;}if(attempt===6)throw Error('health endpoint invalid: status='+health.status+', content-type='+contentType+', location='+String(health.headers.get('location')));await new Promise(r=>setTimeout(r,1500));}must(info?.ok&&info?.authConfigured&&info?.version==='4.0.0','health or auth configuration failed');
-for(const path of ['/','/case-study','/read/a04','/aidc.jpg']){const r=await request(path);must(r.status===302&&r.headers.get('location')?.startsWith('/auth/login'),'anonymous path is not protected: '+path);}
-for(const path of ['/api/updates?source=0','/api/indicators']){must((await request(path)).status===401,'anonymous API not protected: '+path);}
+let info;for(let attempt=1;attempt<=6;attempt++){const health=await request('/api/health?smoke='+Date.now());const contentType=health.headers.get('content-type')||'';if(health.status===200&&contentType.includes('application/json')){info=await health.json();break;}if(attempt===6)throw Error('health endpoint invalid: status='+health.status+', content-type='+contentType+', location='+String(health.headers.get('location')));await new Promise(r=>setTimeout(r,1500));}must(info?.ok&&info?.authConfigured&&info?.version==='4.0.0'&&info?.settingsStorage,'health, auth or KV settings configuration failed');
+for(const path of ['/','/settings','/case-study','/read/a04','/aidc.jpg']){const r=await request(path);must(r.status===302&&r.headers.get('location')?.startsWith('/auth/login'),'anonymous path is not protected: '+path);}
+for(const path of ['/api/updates?source=0','/api/indicators','/api/admin/settings']){must((await request(path)).status===401,'anonymous API not protected: '+path);}
 const csrf=await request('/auth/login',{method:'POST',headers:{Origin:'https://invalid.example','Content-Type':'application/x-www-form-urlencoded'},body:'password=invalid'});must(csrf.status===403,'cross-origin login accepted');
 if(process.env.ATLAS_ACCESS_PASSWORD){
  const login=await request('/auth/login',{method:'POST',headers:{Origin:origin,'Content-Type':'application/x-www-form-urlencoded'},body:new URLSearchParams({password:process.env.ATLAS_ACCESS_PASSWORD})});
@@ -18,4 +18,5 @@ if(process.env.ATLAS_ACCESS_PASSWORD){
  console.log('Feed collection status:',JSON.stringify(data.statuses.map(({name,ok,count})=>({name,ok,count}))));
  const logout=await request('/auth/logout',{method:'POST',headers:{Origin:origin,Cookie:cookie}});must(logout.status===303&&logout.headers.get('set-cookie')?.includes('Max-Age=0'),'logout failed');
 }
-console.log('Atlas smoke tests passed: auth, protected pages/assets/APIs, login, content routes and logout.');
+const loginPage=await request('/auth/login');must(loginPage.ok&&(loginPage.headers.get('content-type')||'').includes('text/html'),'login page failed');must((await loginPage.text()).includes('知域 ATLAS'),'login page content missing');
+console.log('Atlas smoke tests passed: health, KV binding, login entry point, protected pages and unauthenticated API rejection.');
