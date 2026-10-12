@@ -17,7 +17,7 @@ export function SettingsPanel(){
   useEffect(()=>{
     let alive=true;
     fetch('/api/admin/settings',{cache:'no-store'}).then(async r=>{
-      const payload=await r.json().catch(()=>({}));
+      const payload=await r.json().catch(()=>({})) as {error?:string;settings?:SiteSettings;sessionDays?:number};
       if(!r.ok)throw new Error(payload.error||'读取设置失败');
       if(alive){setSettings({...defaultSiteSettings,...payload.settings});setSessionDays(payload.sessionDays||7);}
     }).catch(e=>{if(alive)setError(e instanceof Error?e.message:'读取设置失败');}).finally(()=>{if(alive)setLoading(false);});
@@ -28,7 +28,7 @@ export function SettingsPanel(){
     setSaving(true);setMessage('');setError('');
     try{
       const r=await fetch('/api/admin/settings',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({settings})});
-      const payload=await r.json().catch(()=>({}));
+      const payload=await r.json().catch(()=>({})) as {error?:string;settings?:SiteSettings;sessionDays?:number};
       if(!r.ok)throw new Error(payload.error||'保存失败');
       setSettings({...defaultSiteSettings,...payload.settings});
       setMessage('设置已保存并写入云端存储。');
@@ -43,7 +43,7 @@ export function SettingsPanel(){
     setSaving(true);
     try{
       const r=await fetch('/api/admin/password',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({currentPassword,newPassword})});
-      const payload=await r.json().catch(()=>({}));
+      const payload=await r.json().catch(()=>({})) as {error?:string;settings?:SiteSettings;sessionDays?:number};
       if(!r.ok)throw new Error(payload.error||'密码修改失败');
       setMessage('密码已修改，所有设备的旧登录会话已撤销。正在返回登录页…');
       window.setTimeout(()=>window.location.assign('/auth/login'),900);
@@ -56,7 +56,7 @@ export function SettingsPanel(){
     setSaving(true);setMessage('');setError('');
     try{
       const r=await fetch('/api/admin/logout-all',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'});
-      const payload=await r.json().catch(()=>({}));
+      const payload=await r.json().catch(()=>({})) as {error?:string;settings?:SiteSettings;sessionDays?:number};
       if(!r.ok)throw new Error(payload.error||'操作失败');
       window.location.assign('/auth/login');
     }catch(e){setError(e instanceof Error?e.message:'操作失败');setSaving(false);}
