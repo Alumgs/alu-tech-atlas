@@ -2,11 +2,13 @@ import handler from 'vinext/server/fetch-handler';
 import {configured,verifyPassword,hashPassword,issueSession,validSession,getCookie,sessionCookie,sameOrigin,safeReturn,type AuthEnv} from './auth';
 import {loginPage} from './login';
 import {defaultSiteSettings,sanitizeSiteSettings} from '../lib/site-settings';
+import {editorialEnrich,type EditorialEnv} from './editorial';
 interface Env extends AuthEnv {
  LOGIN_LIMITER:{limit(options:{key:string}):Promise<{success:boolean}>};
  FEED_LIMITER:{limit(options:{key:string}):Promise<{success:boolean}>};
  ASSETS:Fetcher;
  ATLAS_SETTINGS?:KVNamespace;
+ AI?:EditorialEnv['AI'];
 }
 function protect(response:Response){
  const headers=new Headers(response.headers);
@@ -112,6 +114,10 @@ export default {
    if(path.startsWith('/api/admin/')){
     const limited=await env.FEED_LIMITER.limit({key:'atlas-admin:'+getCookie(request).slice(0,48)});
     result=limited.success?await adminApi(request,env,authEnv):json({error:'请求频率过高，请稍后重试。'},429,{'Retry-After':'60'});
+   }else if(path==='/api/editorial/enrich'){
+    if(request.method!=='POST')result=json({error:'仅支持 POST。'},405,{Allow:'POST'});
+    else if(!sameOrigin(request))result=json({error:'请求来源不符。'},403);
+    else {const limited=await env.FEED_LIMITER.limit({key:'atlas-editorial:'+getCookie(request).slice(0,48)});result=limited.success?await editorialEnrich(request,env):json({error:'请求频率过高，请稍后重试。'},429,{'Retry-After':'60'});}
    }else if(path.startsWith('/_next/static/')||path==='/favicon.svg'){
     result=await env.ASSETS.fetch(request);
    }else if(path.startsWith('/api/')&&!await env.FEED_LIMITER.limit({key:'atlas-feed:'+getCookie(request).slice(0,48)}).then(r=>r.success)){

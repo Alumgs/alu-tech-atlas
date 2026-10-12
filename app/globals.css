@@ -165,3 +165,17 @@ body{background:var(--atlas-page-background,#fff)}
 .settings-error{background:#fff3f1;border:1px solid #f1d7d2;color:#a43f34}
 .settings-footnote{font-size:11px;color:#87979d;line-height:1.8;margin-top:20px}
 @media(max-width:700px){.admin-settings{padding:16px 16px 45px}.settings-hero{padding:25px 0 18px}.settings-hero h1{font-size:28px}.settings-card{padding:17px 14px}.settings-form-grid,.settings-style-grid{grid-template-columns:1fr}.settings-field-wide{grid-column:auto}.settings-preview-note{width:100%;margin-left:27px}.settings-actions button{flex:1}.settings-nav-link{padding:7px 8px}.site-header .searchbox{order:3}.site-header .settings-nav-link{order:2}}
+
+
+/* Collapsible research workbench and representative top-ten company labels. */
+.editorial-workbench-collapse{margin:18px 0 24px;border:1px solid #d7e3df;border-radius:14px;background:rgba(255,255,255,.78);overflow:hidden}
+.editorial-workbench-collapse>summary{display:flex;align-items:center;gap:10px;list-style:none;cursor:pointer;padding:15px 18px;font-weight:700;color:#163d38}
+.editorial-workbench-collapse>summary::-webkit-details-marker{display:none}
+.editorial-workbench-collapse>summary:after{content:"＋";margin-left:auto;font-size:18px;color:#14776e}
+.editorial-workbench-collapse[open]>summary{border-bottom:1px solid #e1ebe7}
+.editorial-workbench-collapse[open]>summary:after{content:"−"}
+.editorial-workbench-collapse>summary small{font-weight:400;color:#61736e}
+.editorial-workbench-collapse .editorial-desk{margin:0;padding:18px;border:0;border-radius:0;box-shadow:none}
+.company-rank{display:inline-flex;align-items:center;font-size:11px;line-height:1.5;letter-spacing:.04em;font-weight:750;color:#14776e;background:#eaf4f0;border:1px solid #cde2da;border-radius:4px;padding:1px 6px;margin-right:6px;white-space:nowrap}
+.company-title>div h3{margin:3px 0 0}
+@media(max-width:700px){.editorial-workbench-collapse>summary{flex-wrap:wrap;padding:13px}.editorial-workbench-collapse>summary small{width:100%;margin-left:28px}.editorial-workbench-collapse .editorial-desk{padding:12px}}

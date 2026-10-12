@@ -1,12 +1,16 @@
 import type {News} from './content';
 
+export type EnrichedNews = News & {pageTitle?:string;pageDescription?:string;pageExcerpt?:string;pageFetchedAt?:string;pageStatus?:string;translatedTitle?:string;summaryZh?:string;keyPoints?:string[];aiEnhanced?:boolean};
+
 export type WeChatDocxInput = {
   title: string;
+  editionType?: string;
+  scopeLabel?: string;
   brand?: string;
   domainName: string;
   lead?: string;
   closing?: string;
-  items: News[];
+  items: EnrichedNews[];
   generatedAt?: string;
 };
 
@@ -48,17 +52,24 @@ export function createWechatDocxBlob(input: WeChatDocxInput): Blob {
   const body: string[] = [];
   const brand = input.brand || '知域 ATLAS';
   body.push(paragraph(input.title.trim() || (input.domainName + '精选观察'), 'Title', 'center'));
-  body.push(paragraph(brand + ' · ' + input.domainName + ' · ' + new Date(generated).toLocaleDateString('zh-CN', {timeZone:'Asia/Shanghai'}), 'Subtitle', 'center'));
-  body.push(paragraph('本期精选 ' + picked.length + ' 条 · 原文时间均按北京时间展示', 'Metadata', 'center'));
+  body.push(paragraph(brand + ' · ' + input.domainName + ' · ' + (input.editionType||'精选观察') + ' · ' + new Date(generated).toLocaleDateString('zh-CN', {timeZone:'Asia/Shanghai'}), 'Subtitle', 'center'));
+  body.push(paragraph('本期精选 ' + picked.length + ' 条 · 原文时间按北京时间展示', 'Metadata', 'center'));
+  if(input.scopeLabel)body.push(paragraph('统计范围：'+input.scopeLabel,'Metadata','center'));
   body.push(paragraph('导读', 'Heading1'));
   body.push(paragraph(lead));
-  body.push(paragraph('编辑提示：以下内容按来源、类型与时效进行规则化初筛；如果摘要不完整，请以原文为准，不要把标题推断扩展为已证实事实。', 'Callout'));
+  body.push(paragraph('编辑提示：采用日报式报头、头条导读、编号分条与原文入口。每条内容优先根据新闻网页提取信息并生成中文总结；若页面读取或 AI 生成失败，会在条目中标注，不将标题推断扩展为已证实事实。', 'Callout'));
   body.push(paragraph('本期精选', 'Heading1'));
   picked.forEach((n, index) => {
-    body.push(paragraph(String(index + 1).padStart(2, '0') + '｜' + n.title, 'Heading2'));
+    body.push(paragraph(String(index + 1).padStart(2, '0') + '｜' + (n.translatedTitle||n.title), 'Heading2'));
+    if(n.translatedTitle&&n.translatedTitle.trim()&&n.translatedTitle.trim()!==n.title.trim())body.push(paragraph('原文标题：'+n.title,'Metadata'));
     body.push(paragraph('发布时间：' + stamp(n.date) + '　｜　类型：' + (n.type || '产业动态') + '　｜　来源：' + (n.source || '来源未标注'), 'Metadata'));
-    const summary = (n.summary || '').trim() || '当前资讯索引未提供足够正文摘要。发布前请打开原文，补充事件背景、关键参数与适用范围。';
-    body.push(paragraph('核心信息：' + summary));
+    if(n.pageTitle&&n.pageTitle.trim()!==n.title.trim())body.push(paragraph('网页标题：'+n.pageTitle,'Metadata'));
+    if(n.pageDescription)body.push(paragraph('网页导语：'+n.pageDescription,'Metadata'));
+    const summary = (n.summaryZh || n.pageDescription || n.summary || '').trim() || '页面未提取到可用摘要。发布前请打开原文，核对事件背景、关键参数与适用范围。';
+    body.push(paragraph((n.aiEnhanced?'中文总结：':'摘要（未生成 AI 汉化时保留来源文本）：') + summary));
+    (n.keyPoints||[]).slice(0,4).forEach((point,pointIndex)=>body.push(paragraph('要点 '+(pointIndex+1)+'：'+point)));
+    if(n.pageExcerpt)body.push(paragraph('网页正文摘录：'+n.pageExcerpt.slice(0,360),'Callout'));
+    body.push(paragraph('网页读取状态：'+(n.pageStatus||'未提供')+(n.pageFetchedAt?' · 抓取于 '+stamp(n.pageFetchedAt):''),'Metadata'));
     body.push(paragraph(sourceAdvice(n), 'Callout'));
     const url = safeUrl(n.url);
     if (url) {

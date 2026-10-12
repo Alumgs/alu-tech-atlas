@@ -4,7 +4,7 @@ import {ArrowDownWideNarrow,ArrowUpRight,Check,Download,Filter,Sparkles,Star,Tra
 import type {Domain,News} from '@/lib/content';
 import {rankNews,scoreNews,scoreReasons} from '@/lib/editorial';
 
-type EditorialDeskProps={domain:Domain;domainName:string;items:News[];scopeLabel:string};
+type EditorialDeskProps={domain:Domain;domainName:string;items:News[];scopeLabel:string;editionType:string};
 const selectionLimit=12;
 function sourceClass(n:News){
   const kind=String(n.sourceKind||'');
@@ -15,7 +15,7 @@ function sourceClass(n:News){
   return '其他来源';
 }
 function shortDate(value:string){const time=Date.parse(value);return Number.isFinite(time)?new Date(time).toLocaleString('zh-CN',{timeZone:'Asia/Shanghai',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hour12:false}):'时间未提供';}
-export function EditorialDesk({domain,domainName,items,scopeLabel}:EditorialDeskProps){
+export function EditorialDesk({domain,domainName,items,scopeLabel,editionType}:EditorialDeskProps){
   const [selected,setSelected]=useState<string[]>([]);
   const [loadedDomain,setLoadedDomain]=useState('');
   const [search,setSearch]=useState('');
@@ -25,11 +25,12 @@ export function EditorialDesk({domain,domainName,items,scopeLabel}:EditorialDesk
   const [sort,setSort]=useState<'score'|'date'>('score');
   const [onlySelected,setOnlySelected]=useState(false);
   const [visibleLimit,setVisibleLimit]=useState(10);
-  const [title,setTitle]=useState('知域 ATLAS｜产业精选观察');
+  const [title,setTitle]=useState('');
   const [lead,setLead]=useState('');
   const [notice,setNotice]=useState('');
   const [exporting,setExporting]=useState(false);
-  const storeKey='atlas-wechat-selection-v1:'+domain;
+  const storeKey='atlas-wechat-selection-v1:'+domain+':'+editionType;
+  const defaultTitle='知域 ATLAS｜'+domainName+editionType+' · '+new Date().toLocaleDateString('zh-CN',{timeZone:'Asia/Shanghai'});
 
   const ranked=useMemo(()=>rankNews(items),[items]);
   const rankedByDate=useMemo(()=>[...ranked].sort((a,b)=>Date.parse(b.date)-Date.parse(a.date)),[ranked]);
@@ -60,7 +61,7 @@ export function EditorialDesk({domain,domainName,items,scopeLabel}:EditorialDesk
       setSelected([]);
       setLoadedDomain('new:'+domain);
     }
-    setTitle('知域 ATLAS｜'+domainName+'精选观察');
+    setTitle('');
     setLead('');
     setNotice('');
   },[domain,domainName,storeKey]);
@@ -101,17 +102,23 @@ export function EditorialDesk({domain,domainName,items,scopeLabel}:EditorialDesk
     if(!selectedItems.length){setNotice('当前筛选范围内没有可导出的已选内容。请调整时间范围或重新选择条目。');return;}
     setExporting(true);setNotice('');
     try{
+      const response=await fetch('/api/editorial/enrich',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({domain,editionType,items:selectedItems.map(n=>({url:n.url,title:n.title,date:n.date,source:n.source,type:n.type,summary:(n.summary||'').slice(0,450),language:n.language||''}))}),signal:AbortSignal.timeout(45000)});
+      if(response.status===401){window.location.assign('/auth/login?returnTo='+encodeURIComponent(location.pathname+location.search));return;}
+      if(!response.ok)throw new Error('逐条读取新闻网页失败，暂时无法生成完整成刊');
+      const enrichment=await response.json() as {items:Array<{url:string;pageTitle?:string;pageDescription?:string;pageExcerpt?:string;pageFetchedAt?:string;pageStatus?:string;translatedTitle?:string;summaryZh?:string;keyPoints?:string[];aiEnhanced?:boolean}>;aiCount?:number;notice?:string};
+      const enrichedItems=selectedItems.map(n=>({...n,...(enrichment.items||[]).find(x=>x.url===n.url)}));
       const {downloadWechatDocx}=await import('@/lib/wechat-docx');
-      const filename=downloadWechatDocx({title:title.trim()||'知域 ATLAS｜'+domainName+'精选观察',brand:'知域 ATLAS',domainName,lead,items:selectedItems,generatedAt:new Date().toISOString()});
-      setNotice('DOCX 已生成：'+filename+'。下载后可在 Word 中继续编辑，并复制到微信公众号后台。');
-    }catch{
-      setNotice('DOCX 生成失败，请刷新页面后重试。');
+      const filename=downloadWechatDocx({title:title.trim()||defaultTitle,brand:'知域 ATLAS',domainName,editionType,scopeLabel,lead,items:enrichedItems,generatedAt:new Date().toISOString()});
+      const aiCount=enrichment.aiCount||0;
+      setNotice('DOCX 已生成：'+filename+'。'+selectedItems.length+' 条逐篇抓取完成；'+aiCount+'/'+selectedItems.length+' 条生成了 AI 中文标题、摘要和要点。'+(enrichment.notice?' '+enrichment.notice:'')+' 下载后可在 Word 中继续编辑。');
+    }catch(e){
+      setNotice((e instanceof Error?e.message:'DOCX 生成失败')+'。请检查网络或稍后重试；系统不会把仅有标题的内容冒充全文总结。');
     }finally{setExporting(false);}
   }
 
   return <section className="editorial-desk" aria-label="微信公众号精选工作台">
     <div className="editorial-head">
-      <div><span className="eyebrow"><Sparkles size={14}/> EDITORIAL DESK / 精选与成刊</span><h2>公众号精选工作台</h2><p>先筛选，再编排。支持自动候选、人工调整和真正的 .docx 导出。</p></div>
+      <div><span className="eyebrow"><Sparkles size={14}/> EDITORIAL DESK / 精选与成刊</span><h2>公众号精选工作台</h2><p>先筛选，再编排。导出时逐条读取原网页，提取页面信息，并生成中文标题、摘要与要点；日报、周报、月报按当前时间筛选范围成刊。</p></div>
       <button className="primary-button" onClick={exportDocx} disabled={exporting||selectedItems.length===0}><Download size={16}/>{exporting?'正在生成 DOCX…':'生成公众号 DOCX（'+selectedItems.length+' 条）'}</button>
     </div>
     <div className="editorial-stats">
@@ -153,7 +160,7 @@ export function EditorialDesk({domain,domainName,items,scopeLabel}:EditorialDesk
       {!filtered.length&&<div className="editorial-empty">没有匹配候选。可降低分数阈值、调整来源/类型，或扩大资讯时间范围。</div>}
       {filtered.length>visibleLimit&&<button className="editorial-more" onClick={()=>setVisibleLimit(n=>n+10)}>显示更多候选（{visibleLimit} / {filtered.length}）</button>}
     </div>
-    <details className="editorial-copy-settings"><summary>编辑微信公众号标题与导语</summary><div className="editorial-copy-fields"><label><span>公众号文章标题</span><input value={title} onChange={e=>setTitle(e.target.value)} maxLength={80} placeholder="输入文章标题"/></label><label><span>导语 / 编者按（留空自动生成）</span><textarea value={lead} onChange={e=>setLead(e.target.value)} rows={3} placeholder="可编辑导语；留空时根据已选条目自动生成，不会补写未经来源支持的事实。"/></label></div></details>
+    <details className="editorial-copy-settings"><summary>编辑微信公众号标题与导语</summary><div className="editorial-copy-fields"><label><span>公众号文章标题</span><input value={title||defaultTitle} onChange={e=>setTitle(e.target.value)} maxLength={100} placeholder="输入文章标题"/></label><label><span>导语 / 编者按（留空自动生成）</span><textarea value={lead} onChange={e=>setLead(e.target.value)} rows={3} placeholder="可编辑导语；留空时根据已选条目自动生成，不会补写未经来源支持的事实。"/></label></div></details>
     {notice&&<p className="editorial-message" role="status">{notice}</p>}
     <p className="editorial-footnote">导出文件采用标准 Office Open XML DOCX，可编辑标题、段落及来源链接。导出内容按优先级排序，包含发布前核查清单；建议确认原文、版权和事实后再发布到公众号。</p>
   </section>;
