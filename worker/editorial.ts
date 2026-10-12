@@ -101,7 +101,7 @@ async function readPage(story:Story):Promise<Page>{
  const fallback:Page={...story,pageStatus:'网页正文未读取'};
  const f=await direct(story.url);
  let directPage:Page|undefined;
- let directError=f.error||'直连未返回正文';
+ let directError='直连未返回正文';if('error' in f)directError=f.error;
  if(!('error' in f)){
   const title=meta(f.html,['og:title','twitter:title'])||plain(f.html.match(/<title\b[^>]*>([\s\S]*?)<\/title>/i)?.[1]||'');
   const desc=meta(f.html,['og:description','twitter:description','description']);
