@@ -80,11 +80,9 @@ export function EditorialDesk({domain,domainName,items,scopeLabel}:EditorialDesk
 
   function toggle(url:string){
     setNotice('');
-    setSelected(current=>{
-      if(current.includes(url))return current.filter(x=>x!==url);
-      if(current.length>=selectionLimit){setNotice('微信公众号稿件一次最多精选 12 条，请先移除部分内容。');return current;}
-      return [...current,url];
-    });
+    if(selected.includes(url)){setSelected(selected.filter(x=>x!==url));return;}
+    if(selected.length>=selectionLimit){setNotice('微信公众号稿件一次最多精选 12 条，请先移除部分内容。');return;}
+    setSelected([...selected,url]);
   }
   function autoSelect(){
     const eligible=ranked.filter(n=>!n.stale&&!n.historical&&scoreNews(n)>=34);
