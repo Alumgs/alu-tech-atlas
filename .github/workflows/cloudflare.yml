@@ -69,4 +69,5 @@ jobs:
       - name: Verify production
         env:
           ATLAS_BASE_URL: ${{ vars.ATLAS_BASE_URL || 'https://alu-tech-atlas.alumgs-lab-b74ee9.workers.dev' }}
+          ATLAS_ACCESS_PASSWORD: ${{ secrets.ATLAS_ACCESS_PASSWORD }}
         run: node scripts/smoke.mjs
