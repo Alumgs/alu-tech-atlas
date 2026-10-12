@@ -32,7 +32,7 @@ export default function Portal(){
  const [indicators,setIndicators]=useState<Indicators|null>(null),[metricLoading,setMetricLoading]=useState(false),[exporting,setExporting]=useState(false),[exportError,setExportError]=useState('');
  const [exportFile,setExportFile]=useState<{url:string;filename:string}|null>(null);
  const [siteSettings,setSiteSettings]=useState<SiteSettings>(defaultSiteSettings);
- useEffect(()=>{let active=true;fetch('/api/admin/settings',{cache:'no-store'}).then(async r=>r.ok?r.json():null).then(v=>{if(active&&v?.settings)setSiteSettings({...defaultSiteSettings,...v.settings});}).catch(()=>{});return()=>{active=false;};},[]);
+ useEffect(()=>{let active=true;fetch('/api/admin/settings',{cache:'no-store'}).then(async r=>r.ok?await r.json() as {settings?:SiteSettings}:null).then(v=>{if(active&&v?.settings)setSiteSettings({...defaultSiteSettings,...v.settings});}).catch(()=>{});return()=>{active=false;};},[]);
  useEffect(()=>{const root=document.documentElement;root.style.setProperty('--atlas-accent',siteSettings.accentColor);root.style.setProperty('--atlas-page-background',siteSettings.pageBackground);root.style.setProperty('--atlas-font-scale',String(siteSettings.fontScale));root.style.setProperty('--primary',siteSettings.accentColor);root.style.setProperty('--ring',siteSettings.accentColor);document.body.style.backgroundColor=siteSettings.pageBackground;document.body.style.fontSize=(16*siteSettings.fontScale)+'px';document.body.classList.toggle('atlas-compact-news',siteSettings.compactNews);},[siteSettings]);
  useEffect(()=>()=>{if(exportFile)URL.revokeObjectURL(exportFile.url);},[exportFile]);
  useEffect(()=>{setExportFile(null);},[domain,region,age]);
