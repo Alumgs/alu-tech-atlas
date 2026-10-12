@@ -1,7 +1,7 @@
 'use client';
 import {useState,useEffect,useRef,useCallback,startTransition} from 'react';
 import {sources,type News,type Domain} from '@/lib/content';
-export type FeedStatus={name:string;ok:boolean;count:number;error?:string;checkedAt:string;latestPublishedAt?:string;durationMs?:number};
+export type FeedStatus={name:string;ok:boolean;count:number;error?:string;warning?:string;fallback?:boolean;checkedAt:string;latestPublishedAt?:string;durationMs?:number};
 export type UpdateResult={items:News[];statuses:FeedStatus[];checkedAt:string;cached?:boolean};
 const KEY='atlas-updates-v4';
 const day=(value=Date.now())=>new Date(value).toLocaleDateString('en-CA',{timeZone:'Asia/Shanghai'});
