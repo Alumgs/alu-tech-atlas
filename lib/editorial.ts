@@ -67,12 +67,25 @@ export function dedupeStories(items: News[], now = Date.now()): News[] {
   const ranked = [...items].sort((a, b) => scoreNews(b, now) - scoreNews(a, now) || Date.parse(b.date) - Date.parse(a.date));
   const seenUrls = new Set<string>();
   const accepted: News[] = [];
+  // Near-title checks are bounded to recent, high-priority candidates to avoid
+  // quadratic work when several thousand feeds are merged in the browser.
+  const recentByDomain = new Map<string, News[]>();
+  const nearWindowMs = 14 * 86_400_000;
   for (const item of ranked) {
     const url = String(item.url || '').trim();
     if (!url || seenUrls.has(url)) continue;
-    if (accepted.some(existing => existing.domain === item.domain && similarTitle(existing.title, item.title))) continue;
+    const pool = recentByDomain.get(item.domain) || [];
+    const time = Date.parse(item.date);
+    const duplicate = pool.some(existing => {
+      const otherTime = Date.parse(existing.date);
+      return Number.isFinite(time) && Number.isFinite(otherTime) && Math.abs(time - otherTime) <= nearWindowMs && similarTitle(existing.title, item.title);
+    });
+    if (duplicate) { seenUrls.add(url); continue; }
     seenUrls.add(url);
     accepted.push(item);
+    pool.push(item);
+    if (pool.length > 120) pool.shift();
+    recentByDomain.set(item.domain, pool);
   }
   return accepted;
 }
