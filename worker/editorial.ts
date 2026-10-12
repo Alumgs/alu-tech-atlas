@@ -11,9 +11,8 @@ function attrs(s:string){const out:Record<string,string>={};for(const m of s.mat
 function meta(html:string,names:string[]){for(const tag of html.match(/<meta\b[^>]*>/gi)||[]){const a=attrs(tag),k=(a.property||a.name||a.itemprop||'').toLowerCase();if(names.includes(k)&&a.content)return a.content.trim();}return '';}
 function blockedText(s:string){return /verify (that )?you are human|checking your browser|enable javascript and cookies|access denied|request blocked|unusual traffic|security verification|captcha challenge|验证码|访问过于频繁|异常访问|环境异常/i.test(plain(s).slice(0,1800));}
 function extractDivById(html:string,id:string):string|null{
- const safeId=id.replace(/["\\]/g,'');
- const re=new RegExp('<div\\b(?=[^>]*\\bid=["\\']'+safeId+'["\\'])[^>]*>','i');
- const opening=re.exec(html);if(!opening||opening.index===undefined)return null;
+ const opening=[...html.matchAll(/<div\\b[^>]*>/gi)].find(m=>attrs(m[0]).id===id);
+ if(!opening||opening.index===undefined)return null;
  const start=opening.index+opening[0].length,tail=html.slice(start),tokens=/<\/?div\b[^>]*>/gi;
  let depth=1,m:RegExpExecArray|null;
  while((m=tokens.exec(tail))){
