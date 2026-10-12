@@ -27,3 +27,12 @@ test('creates a real OpenXML docx archive with editable Chinese article content'
   assert.ok(archiveText.includes('https://example.com/report?a=1&amp;b=2'));
   assert.ok(archiveText.includes('来源索引'));
 });
+
+test('Word export includes page-read status and links to the fetched canonical page', async () => {
+  const blob=createWechatDocxBlob({title:'ATLAS 周报',editionType:'周报',domainName:'AIDC 智算中心',items:[{title:'原始标题',url:'https://news.example.com/redirect',pageUrl:'https://news.example.com/article',pageTitle:'网页实际标题',pageStatus:'网页正文已读取',pageFetchedAt:'2026-10-12T08:00:00+08:00',date:'2026-10-12T08:00:00+08:00',source:'测试来源',domain:'aidc',type:'技术研究',summary:'订阅摘要',summaryZh:'这是中文摘要。',aiEnhanced:true}],generatedAt:'2026-10-12T00:00:00.000Z'});
+  const text=new TextDecoder().decode(new Uint8Array(await blob.arrayBuffer()));
+  assert.ok(text.includes('网页实际标题'));
+  assert.ok(text.includes('网页正文已读取'));
+  assert.ok(text.includes('https://news.example.com/article'));
+  assert.ok(text.includes('ATLAS 周报'));
+});

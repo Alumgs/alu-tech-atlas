@@ -99,20 +99,55 @@ export function EditorialDesk({domain,domainName,items,scopeLabel,editionType}:E
   }
   async function exportDocx(){
     if(exporting)return;
-    if(!selectedItems.length){setNotice('当前筛选范围内没有可导出的已选内容。请调整时间范围或重新选择条目。');return;}
+    if(!selectedItems.length){setNotice('当前时间范围内没有已选内容可导出。请先选择新闻，或扩大时间范围。');return;}
     setExporting(true);setNotice('');
     try{
-      const response=await fetch('/api/editorial/enrich',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({domain,editionType,items:selectedItems.map(n=>({url:n.url,title:n.title,date:n.date,source:n.source,type:n.type,summary:(n.summary||'').slice(0,450),language:n.language||''}))}),signal:AbortSignal.timeout(45000)});
-      if(response.status===401){window.location.assign('/auth/login?returnTo='+encodeURIComponent(location.pathname+location.search));return;}
-      if(!response.ok)throw new Error('逐条读取新闻网页失败，暂时无法生成完整成刊');
-      const enrichment=await response.json() as {items:Array<{url:string;pageTitle?:string;pageDescription?:string;pageExcerpt?:string;pageFetchedAt?:string;pageStatus?:string;translatedTitle?:string;summaryZh?:string;keyPoints?:string[];aiEnhanced?:boolean}>;aiCount?:number;notice?:string};
-      const enrichedItems=selectedItems.map(n=>({...n,...(enrichment.items||[]).find(x=>x.url===n.url)}));
+      // Always prepare a valid editable Word fallback before attempting optional enrichment.
+      let enrichedItems=selectedItems.map(n=>({...n,summaryZh:(n.summary||'').trim()||'订阅源未提供摘要，请打开原文核对。',pageStatus:'未读取网页，保留现有订阅源信息'}));
+      let enrichmentNotice='';
+      let aiCount=0;
+      try{
+        const response=await fetch('/api/editorial/enrich',{
+          method:'POST',
+          headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({domain,editionType,items:selectedItems.map(n=>({url:n.url,title:n.title,date:n.date,source:n.source,type:n.type,summary:(n.summary||'').slice(0,450),language:n.language||''}))}),
+          signal:AbortSignal.timeout(45000)
+        });
+        if(response.status===401){
+          window.location.assign('/auth/login?returnTo='+encodeURIComponent(location.pathname+location.search));
+          return;
+        }
+        if(!response.ok){
+          enrichmentNotice='网页增强服务响应 '+response.status+'，已使用现有摘要生成文档。';
+        }else{
+          const result=await response.json() as {items?:Array<{url:string;pageUrl?:string;pageTitle?:string;pageDescription?:string;pageExcerpt?:string;pageFetchedAt?:string;pageStatus?:string;translatedTitle?:string;summaryZh?:string;keyPoints?:string[];aiEnhanced?:boolean}>;aiCount?:number;notice?:string};
+          enrichedItems=selectedItems.map(n=>{
+            const page=(result.items||[]).find(x=>x.url===n.url);
+            return {...n,...(page||{}),summaryZh:page?.summaryZh||page?.pageDescription||(n.summary||'订阅源未提供摘要，请打开原文核对。'),pageStatus:page?.pageStatus||'未读取网页，保留现有订阅源信息'};
+          });
+          aiCount=result.aiCount||0;
+          enrichmentNotice=result.notice||'';
+        }
+      }catch(e){
+        enrichmentNotice=(e instanceof Error&&e.name==='TimeoutError')
+          ?'新闻网页增强超时，已使用现有摘要生成文档。'
+          :'新闻网页增强服务暂不可用，已使用现有摘要生成文档。';
+      }
       const {downloadWechatDocx}=await import('@/lib/wechat-docx');
-      const filename=downloadWechatDocx({title:title.trim()||defaultTitle,brand:'知域 ATLAS',domainName,editionType,scopeLabel,lead,items:enrichedItems,generatedAt:new Date().toISOString()});
-      const aiCount=enrichment.aiCount||0;
-      setNotice('DOCX 已生成：'+filename+'。'+selectedItems.length+' 条逐篇抓取完成；'+aiCount+'/'+selectedItems.length+' 条生成了 AI 中文标题、摘要和要点。'+(enrichment.notice?' '+enrichment.notice:'')+' 下载后可在 Word 中继续编辑。');
+      const filename=downloadWechatDocx({
+        title:title.trim()||defaultTitle,
+        brand:'知域 ATLAS',
+        domainName,
+        editionType,
+        scopeLabel,
+        lead,
+        items:enrichedItems,
+        generatedAt:new Date().toISOString()
+      });
+      const fetchedCount=enrichedItems.filter(n=>/网页正文已读取|已读取页面信息/.test(n.pageStatus||'')).length;
+      setNotice('DOCX 已生成并开始下载：'+filename+'。已读取 '+fetchedCount+'/'+selectedItems.length+' 条网页，AI 中文总结 '+aiCount+'/'+selectedItems.length+' 条。'+(enrichmentNotice?' '+enrichmentNotice:'')+' 未能读取的条目会在文档中标注状态并保留原文入口。');
     }catch(e){
-      setNotice((e instanceof Error?e.message:'DOCX 生成失败')+'。请检查网络或稍后重试；系统不会把仅有标题的内容冒充全文总结。');
+      setNotice('Word 文档生成失败：'+(e instanceof Error?e.message:'未知错误')+'。请重试；若仍失败，请截图此提示用于定位。');
     }finally{setExporting(false);}
   }
 

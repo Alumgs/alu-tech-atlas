@@ -1,6 +1,6 @@
 import type {News} from './content';
 
-export type EnrichedNews = News & {pageTitle?:string;pageDescription?:string;pageExcerpt?:string;pageFetchedAt?:string;pageStatus?:string;translatedTitle?:string;summaryZh?:string;keyPoints?:string[];aiEnhanced?:boolean};
+export type EnrichedNews = News & {pageUrl?:string;pageTitle?:string;pageDescription?:string;pageExcerpt?:string;pageFetchedAt?:string;pageStatus?:string;translatedTitle?:string;summaryZh?:string;keyPoints?:string[];aiEnhanced?:boolean};
 
 export type WeChatDocxInput = {
   title: string;
@@ -64,6 +64,7 @@ export function createWechatDocxBlob(input: WeChatDocxInput): Blob {
     if(n.translatedTitle&&n.translatedTitle.trim()&&n.translatedTitle.trim()!==n.title.trim())body.push(paragraph('原文标题：'+n.title,'Metadata'));
     body.push(paragraph('发布时间：' + stamp(n.date) + '　｜　类型：' + (n.type || '产业动态') + '　｜　来源：' + (n.source || '来源未标注'), 'Metadata'));
     if(n.pageTitle&&n.pageTitle.trim()!==n.title.trim())body.push(paragraph('网页标题：'+n.pageTitle,'Metadata'));
+    if(n.pageUrl&&safeUrl(n.pageUrl)&&n.pageUrl!==n.url){const pageRid='rId'+(relationships.length+2);relationships.push('<Relationship Id="'+pageRid+'" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink" Target="'+xml(n.pageUrl)+'" TargetMode="External"/>');body.push(linkParagraph('读取到的网页地址：'+n.pageUrl,pageRid));}
     if(n.pageDescription)body.push(paragraph('网页导语：'+n.pageDescription,'Metadata'));
     const summary = (n.summaryZh || n.pageDescription || n.summary || '').trim() || '页面未提取到可用摘要。发布前请打开原文，核对事件背景、关键参数与适用范围。';
     body.push(paragraph((n.aiEnhanced?'中文总结：':'摘要（未生成 AI 汉化时保留来源文本）：') + summary));
@@ -181,7 +182,8 @@ export function downloadWechatDocx(input: WeChatDocxInput): string {
   const anchor = document.createElement('a');
   const date = new Date().toLocaleDateString('en-CA', {timeZone:'Asia/Shanghai'}).replace(/-/g, '');
   anchor.href = url;
-  anchor.download = '知域ATLAS_公众号精选_' + date + '.docx';
+  const issue=(input.editionType||'精选观察').replace(/[\\/:*?"<>|]/g,'').slice(0,12);
+  anchor.download = '知域ATLAS_' + issue + '_' + date + '.docx';
   document.body.appendChild(anchor);
   anchor.click();
   anchor.remove();
