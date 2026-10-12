@@ -111,7 +111,7 @@ export function EditorialDesk({domain,domainName,items,scopeLabel,editionType}:E
           method:'POST',
           headers:{'Content-Type':'application/json'},
           body:JSON.stringify({domain,editionType,items:selectedItems.map(n=>({url:n.url,title:n.title,date:n.date,source:n.source,type:n.type,summary:(n.summary||'').slice(0,450),language:n.language||''}))}),
-          signal:AbortSignal.timeout(45000)
+          signal:AbortSignal.timeout(30000)
         });
         if(response.status===401){
           window.location.assign('/auth/login?returnTo='+encodeURIComponent(location.pathname+location.search));
@@ -154,7 +154,7 @@ export function EditorialDesk({domain,domainName,items,scopeLabel,editionType}:E
   return <section className="editorial-desk" aria-label="微信公众号精选工作台">
     <div className="editorial-head">
       <div><span className="eyebrow"><Sparkles size={14}/> EDITORIAL DESK / 精选与成刊</span><h2>公众号精选工作台</h2><p>先筛选，再编排。导出时逐条读取原网页，提取页面信息，并生成中文标题、摘要与要点；日报、周报、月报按当前时间筛选范围成刊。</p></div>
-      <button className="primary-button" onClick={exportDocx} disabled={exporting||selectedItems.length===0}><Download size={16}/>{exporting?'正在生成 DOCX…':'生成公众号 DOCX（'+selectedItems.length+' 条）'}</button>
+      <button className="primary-button" onClick={exportDocx} disabled={exporting}><Download size={16}/>{exporting?'正在生成 DOCX…':'生成公众号 DOCX（'+selectedItems.length+' 条）'}</button>
     </div>
     <div className="editorial-stats">
       <div><strong>{ranked.length}</strong><span>去重候选</span></div>
