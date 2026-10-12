@@ -119,7 +119,10 @@ export function createWechatDocxBlob(input: WeChatDocxInput): Blob {
     'word/document.xml': documentXml, 'word/styles.xml': stylesXml,
     'word/_rels/document.xml.rels': rels, 'docProps/core.xml': core,
   };
-  const archive = makeZip(files);\n  const arrayBuffer = new ArrayBuffer(archive.byteLength);\n  new Uint8Array(arrayBuffer).set(archive);\n  return new Blob([arrayBuffer], {type:'application/vnd.openxmlformats-officedocument.wordprocessingml.document'});
+  const archive = makeZip(files);
+  const arrayBuffer = new ArrayBuffer(archive.byteLength);
+  new Uint8Array(arrayBuffer).set(archive);
+  return new Blob([arrayBuffer], {type:'application/vnd.openxmlformats-officedocument.wordprocessingml.document'});
 }
 
 function makeZip(files: Record<string, string>): Uint8Array {
