@@ -12,7 +12,8 @@ function decode(s:string){
  return s.replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g,'$1').replace(/&nbsp;/gi,' ').replace(/&amp;/gi,'&').replace(/&quot;/gi,'"').replace(/&apos;|&#39;/gi,"'").replace(/&lt;/gi,'<').replace(/&gt;/gi,'>').replace(/&#(\d+);/g,(_,n)=>{const c=Number(n);return c>=0&&c<=1114111?String.fromCodePoint(c):' ';}).replace(/&#x([0-9a-f]+);/gi,(_,n)=>{const c=parseInt(n,16);return c>=0&&c<=1114111?String.fromCodePoint(c):' ';});
 }
 function clean(s:string){
- return decode(s.replace(/<script\b[^>]*>[\s\S]*?<\/script\s*>/gi,' ').replace(/<style\b[^>]*>[\s\S]*?<\/style\s*>/gi,' ').replace(/<[^>]*>/g,' ')).replace(/[\t\f\v ]+/g,' ').replace(/\s*\n\s*/g,' ').trim();
+ const markup=s.replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g,'$1').replace(/<script\b[^>]*>[\s\S]*?<\/script\s*>/gi,' ').replace(/<style\b[^>]*>[\s\S]*?<\/style\s*>/gi,' ').replace(/<[^>]*>/g,' ');
+ return decode(markup).replace(/[\t\f\v ]+/g,' ').replace(/\s*\n\s*/g,' ').trim();
 }
 function tag(s:string,n:string){
  return clean(s.match(new RegExp('<'+n+'(?:\\s[^>]*)?>([\\s\\S]*?)<\\/'+n+'\\s*>','i'))?.[1]||'');
@@ -99,9 +100,14 @@ async function fetchFeed(url:string,source:FeedSource,checkedAt:string,timeoutMs
  if(!items.length)throw new Error('订阅有响应，但未解析到带有效日期、正文链接和相关内容的条目');
  return items;
 }
+async function mapLimit<T,R>(items:T[],limit:number,task:(item:T)=>Promise<R>):Promise<R[]>{
+ const output=new Array<R>(items.length);let cursor=0;
+ const workers=Array.from({length:Math.min(limit,items.length)},async()=>{while(true){const index=cursor++;if(index>=items.length)return;output[index]=await task(items[index]);}});
+ await Promise.all(workers);return output;
+}
 async function collect(selected:FeedSource[]=sources):Promise<Payload>{
  const checkedAt=new Date().toISOString();
- const results=await Promise.all(selected.map(async source=>{
+ const results=await mapLimit(selected,5,async source=>{
   const started=Date.now();
   try{
    let primaryError='';let items:News[]=[];
@@ -132,7 +138,7 @@ async function collect(selected:FeedSource[]=sources):Promise<Payload>{
    console.warn('feed_failed',source.name,errorLabel(e));
    return {items:stale,status:{name:source.name,domain:source.domain,ok:false,count:stale.length,error:errorLabel(e),checkedAt,durationMs:Date.now()-started} as FeedStatus};
   }
- }));
+ });
  const seen=new Set<string>();
  const items=results.flatMap(r=>r.items).filter(n=>{const key=n.domain+'|'+n.url;if(seen.has(key))return false;seen.add(key);return true;}).sort((a,b)=>Date.parse(b.date)-Date.parse(a.date));
  return {items,statuses:results.map(r=>r.status),checkedAt};
