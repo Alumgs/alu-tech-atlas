@@ -1,95 +1,106 @@
 import type {News} from './content';
+import {canonicalUrl, publicUrl} from './url-safety.ts';
 
-/**
- * A deliberately transparent, rule-based editorial score. It prioritizes recency,
- * primary-source proximity, information type and summary completeness; it is not
- * an LLM verdict or a claim that facts have been independently verified.
- */
-export function scoreNews(n: News, now = Date.now()): number {
-  const published = Date.parse(n.date);
-  const ageDays = Number.isFinite(published) ? Math.max(0, (now - published) / 86_400_000) : 45;
-  const recency = Math.round(28 * Math.exp(-ageDays / 24));
-  const typeScore: Record<string, number> = {
-    '研究论文': 24, '技术研究': 23, '企业财报': 22, '产品发布': 20,
-    '市场洞察': 15, '政策法规': 21, '行业活动': 8,
-  };
-  const kind = String(n.sourceKind || '');
-  const source = String(n.source || '') + ' ' + String(n.feed || '');
-  let sourceScore = 10;
-  if (/官方直连|官方来源|primary|first.party/i.test(kind) || /官方|政府|部委|研究院|arxiv|nvidia developer|investor relations|sec edgar|iea\b/i.test(source)) sourceScore = 25;
-  else if (/媒体直连|专业媒体|独立媒体/i.test(kind)) sourceScore = 17;
-  else if (/新闻聚合|聚合/i.test(kind) || /news.google.com/i.test(String(n.url))) sourceScore = 7;
-  const summary = (n.summary || '').trim();
-  const completeness = summary.length >= 120 ? 11 : summary.length >= 60 ? 8 : summary.length >= 25 ? 4 : 0;
-  const specificity = /\d/.test(n.title) ? 3 : 0;
-  const penalty = (n.stale ? 12 : 0) + (n.historical ? 10 : 0);
-  return Math.max(0, Math.min(100, (typeScore[n.type] ?? 12) + recency + sourceScore + completeness + specificity - penalty));
+export type SourceTier = 'primary' | 'media' | 'aggregate' | 'other';
+export const tierLabels: Record<SourceTier, string> = {primary:'一手资料',media:'专业媒体',aggregate:'聚合索引',other:'其他来源'};
+// A publisher label alone must not promote an unknown website to an official source.
+const primaryRoots=['nvidia.com','arxiv.org','iea.org','abb.com','serverobotics.com','huawei.com','openai.com','anthropic.com','deepmind.google','research.google','ai.meta.com','huggingface.co','baai.ac.cn','gov.cn','bytedance.com','unitree.com','ubtrobot.com','qwen.ai'];
+const mediaRoots=['techcrunch.com','datacenterdynamics.com','therobotreport.com','venturebeat.com','infoq.cn','qbitai.com','ieee.org','acm.org','nature.com','science.org'];
+const matches=(host:string,root:string)=>host===root||host.endsWith('.'+root);
+export function sourceTier(n:News):SourceTier{
+ const host=publicUrl(n.url)?.hostname||'';
+ if(matches(host,'news.google.com')||/新闻聚合|聚合索引/.test(n.sourceKind||''))return 'aggregate';
+ if(primaryRoots.some(root=>matches(host,root)))return 'primary';
+ if(mediaRoots.some(root=>matches(host,root)))return 'media';
+ return 'other';
 }
-
-export function scoreReasons(n: News, now = Date.now()): string[] {
-  const reasons: string[] = [];
-  const age = (now - Date.parse(n.date)) / 86_400_000;
-  if (Number.isFinite(age) && age <= 7) reasons.push('近 7 天发布');
-  const kind = String(n.sourceKind || '');
-  const source = String(n.source || '') + ' ' + String(n.feed || '');
-  if (/官方直连|官方来源|primary|first.party/i.test(kind) || /官方|政府|部委|研究院|arxiv|nvidia developer|investor relations|sec edgar|iea\b/i.test(source)) reasons.push('一手/专业来源优先');
-  if (['研究论文','技术研究','企业财报','产品发布','政策法规'].includes(n.type)) reasons.push('具备技术或产业决策价值');
-  if ((n.summary || '').trim().length >= 60) reasons.push('有可读摘要');
-  if (n.stale || n.historical) reasons.push('历史/缓存内容，发布前需复核');
-  return reasons.slice(0, 3);
+export function scoreNews(n:News,now=Date.now()):number{
+ const time=Date.parse(n.date),age=(now-time)/86400000;
+ if(!canonicalUrl(n.url)||!Number.isFinite(time)||time>now+300000)return 0;
+ const recency=Math.round(28*Math.exp(-Math.max(0,age)/24));
+ const types:Record<string,number>={'研究论文':24,'技术研究':23,'企业财报':22,'产品发布':20,'市场洞察':15,'政策法规':21,'行业活动':8};
+ const source={primary:25,media:17,aggregate:7,other:10}[sourceTier(n)];
+ const length=(n.summary||'').trim().length;
+ const completeness=length>=120?11:length>=60?8:length>=25?4:0;
+ return Math.max(0,Math.min(100,(types[n.type]??12)+recency+source+completeness+(/\d/.test(n.title)?3:0)-(n.stale?12:0)-(n.historical?10:0)));
 }
-
-function normalizeTitle(title: string): string {
-  return title.toLocaleLowerCase().replace(/[\u200B-\u200D\uFEFF]/g, '').replace(/[^\p{L}\p{N}]/gu, '');
+export function scoreReasons(n:News,now=Date.now()):string[]{
+ const reasons:string[]=[],age=(now-Date.parse(n.date))/86400000;
+ if(Number.isFinite(age)&&age>=0&&age<=7)reasons.push('近 7 天发布');
+ if(sourceTier(n)==='primary')reasons.push('一手资料优先');
+ if(['研究论文','技术研究','企业财报','产品发布','政策法规'].includes(n.type))reasons.push('技术与产业研究线索');
+ if((n.summary||'').trim().length>=60)reasons.push('有来源摘要');
+ if(n.stale||n.historical)reasons.push('历史/缓存资料');
+ return reasons.slice(0,3);
 }
-
-function bigrams(value: string): Set<string> {
-  const chars = Array.from(value);
-  const out = new Set<string>();
-  if (chars.length < 2) return new Set(chars);
-  for (let i = 0; i < chars.length - 1; i++) out.add(chars[i] + chars[i + 1]);
-  return out;
+function normalizeTitle(n:News):string{
+ let title=n.title.toLowerCase();const source=n.source.toLowerCase().trim();
+ if(source&&title.endsWith(' - '+source))title=title.slice(0,-source.length-3);
+ return title.replace(/[\u200B-\u200D\uFEFF]/g,'').replace(/[^\p{L}\p{N}]/gu,'');
 }
-
-function similarTitle(a: string, b: string): boolean {
-  const na = normalizeTitle(a), nb = normalizeTitle(b);
-  if (!na || !nb) return false;
-  if (na === nb) return true;
-  if (Math.min(Array.from(na).length, Array.from(nb).length) < 14) return false;
-  const aa = bigrams(na), bb = bigrams(nb);
-  let common = 0;
-  for (const part of aa) if (bb.has(part)) common++;
-  return common / Math.max(1, aa.size + bb.size - common) >= 0.86;
+function grams(value:string){const chars=Array.from(value),out=new Set<string>();for(let i=0;i<chars.length-1;i++)out.add(chars[i]+chars[i+1]);return out;}
+function sameEvent(a:News,b:News):boolean{
+ if(a.domain!==b.domain||Math.abs(Date.parse(a.date)-Date.parse(b.date))>14*86400000)return false;
+ const left=normalizeTitle(a),right=normalizeTitle(b);
+ if(!left||!right)return false;
+ if(left===right)return true;
+ // Different model versions, quarters and measured values remain separate updates.
+ const numbers=(s:string)=>[...s.matchAll(/\d+(?:\.\d+)?/g)].map(m=>m[0]).sort().join('|');
+ if(numbers(a.title)!==numbers(b.title)||Math.min(left.length,right.length)<14)return false;
+ const x=grams(left),y=grams(right);let common=0;for(const part of x)if(y.has(part))common++;
+ return common/Math.max(1,x.size+y.size-common)>=0.82;
 }
-
-/** Deduplicates identical URLs and very similar titles, preferring stronger sources. */
-export function dedupeStories(items: News[], now = Date.now()): News[] {
-  const ranked = [...items].sort((a, b) => scoreNews(b, now) - scoreNews(a, now) || Date.parse(b.date) - Date.parse(a.date));
-  const seenUrls = new Set<string>();
-  const accepted: News[] = [];
-  // Near-title checks are bounded to recent, high-priority candidates to avoid
-  // quadratic work when several thousand feeds are merged in the browser.
-  const recentByDomain = new Map<string, News[]>();
-  const nearWindowMs = 14 * 86_400_000;
-  for (const item of ranked) {
-    const url = String(item.url || '').trim();
-    if (!url || seenUrls.has(url)) continue;
-    const pool = recentByDomain.get(item.domain) || [];
-    const time = Date.parse(item.date);
-    const duplicate = pool.some(existing => {
-      const otherTime = Date.parse(existing.date);
-      return Number.isFinite(time) && Number.isFinite(otherTime) && Math.abs(time - otherTime) <= nearWindowMs && similarTitle(existing.title, item.title);
-    });
-    if (duplicate) { seenUrls.add(url); continue; }
-    seenUrls.add(url);
-    accepted.push(item);
-    pool.push(item);
-    if (pool.length > 120) pool.shift();
-    recentByDomain.set(item.domain, pool);
+export type NewsEvent={id:string;primary:News;reports:News[];sourceCount:number;heat:number;score:number;latestDate:string};
+function publisher(n:News):string{
+ const host=publicUrl(n.url)?.hostname||'';
+ if(sourceTier(n)!=='aggregate')return [...primaryRoots,...mediaRoots].find(root=>matches(host,root))||host.replace(/^www\./,'');
+ const label=n.source.toLowerCase().replace(/[\s\p{P}]+/gu,'');
+ const aliases:Array<[RegExp,string]>=[[/nvidia|英伟达/,'nvidia.com'],[/datacenterdynamics|dcd|datacentredynamics/,'datacenterdynamics.com'],[/techcrunch/,'techcrunch.com'],[/therobotreport/,'therobotreport.com'],[/venturebeat/,'venturebeat.com'],[/量子位|qbitai/,'qbitai.com'],[/infoq/,'infoq.cn'],[/arxiv/,'arxiv.org'],[/huggingface/,'huggingface.co'],[/openai/,'openai.com'],[/anthropic/,'anthropic.com'],[/华为|huawei/,'huawei.com']];
+ return aliases.find(([pattern])=>pattern.test(label))?.[1]||label;
+}
+function representative(a:News,b:News):News{
+ if(Boolean(a.stale)!==Boolean(b.stale))return a.stale?b:a;
+ const material=(n:News)=>(n.summary||'').trim().length>=25;
+ if(material(a)!==material(b))return material(a)?a:b;
+ const tier={primary:0,media:1,other:2,aggregate:3};
+ return tier[sourceTier(a)]<=tier[sourceTier(b)]?a:b;
+}
+/** Conservative, bounded grouping. Ambiguous reports stay separate. */
+export function clusterStories(items:News[],now=Date.now()):NewsEvent[]{
+ const sorted=items.filter(n=>canonicalUrl(n.url)&&Number.isFinite(Date.parse(n.date))&&Date.parse(n.date)<=now+300000)
+ .sort((a,b)=>Number(Boolean(a.stale))-Number(Boolean(b.stale))||scoreNews(b,now)-scoreNews(a,now)||Date.parse(b.date)-Date.parse(a.date));
+ const events:NewsEvent[]=[],urls=new Map<string,NewsEvent>(),titles=new Map<string,NewsEvent>(),recent=new Map<string,NewsEvent[]>();
+ for(const item of sorted.slice(0,5000)){
+  const canonical=item.domain+'|'+canonicalUrl(item.url),titleKey=item.domain+'|'+normalizeTitle(item),byTitle=titles.get(titleKey);
+  const event=urls.get(canonical)||(byTitle&&sameEvent(byTitle.primary,item)?byTitle:undefined)||(recent.get(item.domain)||[]).find(e=>sameEvent(e.primary,item));
+  if(event){
+   event.primary=representative(event.primary,item);event.score=scoreNews(event.primary,now);
+   if(!event.reports.some(n=>canonicalUrl(n.url)===canonicalUrl(item.url)))event.reports.push(item);
+   urls.set(canonical,event);
+  }else{
+   const next:NewsEvent={id:canonical,primary:item,reports:[item],sourceCount:1,heat:0,score:scoreNews(item,now),latestDate:item.date};
+   events.push(next);urls.set(canonical,next);titles.set(titleKey,next);
+   const pool=recent.get(item.domain)||[];pool.push(next);if(pool.length>120)pool.shift();recent.set(item.domain,pool);
   }
-  return accepted;
+ }
+ for(const event of events){
+  event.reports.sort((a,b)=>Date.parse(b.date)-Date.parse(a.date));event.latestDate=event.reports[0].date;
+  event.sourceCount=new Set(event.reports.map(publisher)).size;
+  const heat=new Map<string,number>();
+  for(const report of event.reports){const age=(now-Date.parse(report.date))/3600000;if(/^\d{4}-\d{2}-\d{2}$/.test(report.date)||age<0||age>48||report.stale||report.historical)continue;const key=publisher(report);heat.set(key,Math.max(heat.get(key)||0,100*Math.pow(0.5,age/24)));}
+  event.heat=Math.round([...heat.values()].reduce((a,b)=>a+b,0));
+ }
+ return events;
 }
-
-export function rankNews(items: News[], now = Date.now()): News[] {
-  return dedupeStories(items, now).sort((a, b) => scoreNews(b, now) - scoreNews(a, now) || Date.parse(b.date) - Date.parse(a.date));
+export function dedupeStories(items:News[],now=Date.now()):News[]{return clusterStories(items,now).map(e=>e.primary);}
+export function rankNews(items:News[],now=Date.now()):News[]{return dedupeStories(items,now).sort((a,b)=>scoreNews(b,now)-scoreNews(a,now)||Date.parse(b.date)-Date.parse(a.date));}
+/** Require source material beyond a title, and at most two stories per publisher. */
+export function selectEdition(items:News[],limit=6,minScore=34,now=Date.now()):News[]{
+ const picked:News[]=[],counts=new Map<string,number>();
+ for(const n of rankNews(items,now)){
+  if(n.stale||n.historical||(n.summary||'').trim().length<25||scoreNews(n,now)<minScore)continue;
+  const key=publisher(n);if((counts.get(key)||0)>=2)continue;
+  picked.push(n);counts.set(key,(counts.get(key)||0)+1);if(picked.length>=limit)break;
+ }
+ return picked;
 }

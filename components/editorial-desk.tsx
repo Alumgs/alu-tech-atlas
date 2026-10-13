@@ -2,20 +2,15 @@
 import {useEffect,useMemo,useState} from 'react';
 import {ArrowDownWideNarrow,ArrowUpRight,Check,Download,Filter,Sparkles,Star,Trash2} from 'lucide-react';
 import type {Domain,News} from '@/lib/content';
-import {rankNews,scoreNews,scoreReasons} from '@/lib/editorial';
+import {rankNews,scoreNews,scoreReasons,sourceTier,clusterStories,selectEdition} from '@/lib/editorial';
+import {canonicalUrl} from '@/lib/url-safety';
+import {publicationLabel} from '@/lib/publication-time';
 
-type EditorialDeskProps={domain:Domain;domainName:string;items:News[];scopeLabel:string;editionType:string};
+type EditorialDeskProps={domain:Domain;domainName:string;items:News[];scopeLabel:string;editionType:string;minEditorialScore?:number;editionSize?:number;brand?:string};
 const selectionLimit=12;
-function sourceClass(n:News){
-  const kind=String(n.sourceKind||'');
-  const source=String(n.source||'')+' '+String(n.feed||'');
-  if(/官方直连|官方来源|primary|first.party/i.test(kind)||/官方|政府|部委|研究院|nvidia developer|investor relations|sec edgar|arxiv/i.test(source))return '官方/一手';
-  if(/媒体直连|专业媒体|独立媒体/i.test(kind))return '专业媒体';
-  if(/新闻聚合|聚合/i.test(kind)||/news.google.com/i.test(n.url))return '新闻聚合';
-  return '其他来源';
-}
-function shortDate(value:string){const time=Date.parse(value);return Number.isFinite(time)?new Date(time).toLocaleString('zh-CN',{timeZone:'Asia/Shanghai',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hour12:false}):'时间未提供';}
-export function EditorialDesk({domain,domainName,items,scopeLabel,editionType}:EditorialDeskProps){
+function sourceClass(n:News){return {primary:'官方/一手',media:'专业媒体',aggregate:'新闻聚合',other:'其他来源'}[sourceTier(n)];}
+const shortDate=publicationLabel;
+export function EditorialDesk({domain,domainName,items,scopeLabel,editionType,minEditorialScore=34,editionSize=6,brand="知域 ATLAS"}:EditorialDeskProps){
   const [selected,setSelected]=useState<string[]>([]);
   const [loadedDomain,setLoadedDomain]=useState('');
   const [search,setSearch]=useState('');
@@ -29,8 +24,12 @@ export function EditorialDesk({domain,domainName,items,scopeLabel,editionType}:E
   const [lead,setLead]=useState('');
   const [notice,setNotice]=useState('');
   const [exporting,setExporting]=useState(false);
+  const [exported,setExported]=useState<string[]>([]);
+  const [avoidExported,setAvoidExported]=useState(true);
+  const historyKey='atlas-edition-history-v1:'+domain;
+  const groups=useMemo(()=>clusterStories(items),[items]);
   const storeKey='atlas-wechat-selection-v1:'+domain+':'+editionType;
-  const defaultTitle='知域 ATLAS｜'+domainName+editionType+' · '+new Date().toLocaleDateString('zh-CN',{timeZone:'Asia/Shanghai'});
+  const defaultTitle=brand+' '+domainName+editionType+' '+new Date().toLocaleDateString('zh-CN',{timeZone:'Asia/Shanghai'});
 
   const ranked=useMemo(()=>rankNews(items),[items]);
   const rankedByDate=useMemo(()=>[...ranked].sort((a,b)=>Date.parse(b.date)-Date.parse(a.date)),[ranked]);
@@ -47,11 +46,12 @@ export function EditorialDesk({domain,domainName,items,scopeLabel,editionType}:E
     );
     return rows;
   },[ranked,rankedByDate,search,source,type,minScore,sort,onlySelected,selected]);
-  const selectedItems=useMemo(()=>ranked.filter(n=>selected.includes(n.url)).slice(0,selectionLimit),[ranked,selected]);
+  const selectedItems=useMemo(()=>ranked.filter(n=>selected.includes(n.url)).slice(0,selectionLimit).map(n=>({...n,relatedReports:groups.find(e=>e.primary.url===n.url)?.reports||[n]})),[ranked,selected,groups]);
   const topSourceCount=selectedItems.filter(n=>sourceClass(n)==='官方/一手').length;
 
   useEffect(()=>{
     setLoadedDomain('');
+    try{const value=JSON.parse(localStorage.getItem(historyKey)||'[]');setExported(Array.isArray(value)?value.filter(x=>typeof x==='string').slice(-500):[]);}catch{setExported([]);}
     let saved:string|null=null;
     try{saved=localStorage.getItem(storeKey);}catch{}
     if(saved!==null){
@@ -68,11 +68,11 @@ export function EditorialDesk({domain,domainName,items,scopeLabel,editionType}:E
 
   useEffect(()=>{
     if(loadedDomain!=='new:'+domain||!ranked.length)return;
-    const eligible=ranked.filter(n=>!n.stale&&!n.historical&&scoreNews(n)>=34);
-    const picks=(eligible.length?eligible:ranked).slice(0,6).map(n=>n.url);
+    const eligible=ranked.filter(n=>!avoidExported||!wasExported(n));
+    const picks=selectEdition(eligible,editionSize,minEditorialScore).map(n=>n.url);
     setSelected(picks);
     setLoadedDomain(domain);
-  },[loadedDomain,domain,ranked]);
+  },[loadedDomain,domain,ranked,editionSize,minEditorialScore,exported,avoidExported]);
 
   useEffect(()=>{
     if(loadedDomain!==domain)return;
@@ -85,11 +85,12 @@ export function EditorialDesk({domain,domainName,items,scopeLabel,editionType}:E
     if(selected.length>=selectionLimit){setNotice('微信公众号稿件一次最多精选 12 条，请先移除部分内容。');return;}
     setSelected([...selected,url]);
   }
+  function wasExported(n:News){return (groups.find(e=>e.primary.url===n.url)?.reports||[n]).some(report=>exported.includes(canonicalUrl(report.url)));}
   function autoSelect(){
-    const eligible=ranked.filter(n=>!n.stale&&!n.historical&&scoreNews(n)>=34);
-    const picks=(eligible.length?eligible:ranked).slice(0,6).map(n=>n.url);
+    const eligible=ranked.filter(n=>!avoidExported||!wasExported(n));
+    const picks=selectEdition(eligible,editionSize,minEditorialScore).map(n=>n.url);
     setSelected(picks);
-    setNotice('已按时效、来源类别、内容类型与摘要完整度生成候选精选；请检查原文后再发布。');
+    setNotice(picks.length?'已生成 '+picks.length+' 条候选：每个来源最多 2 条，已排除旧缓存、无摘要及近期已导出事件。':'当前范围没有满足来源摘要、分值与去重条件的候选，可降低阈值或扩大时间范围。');
   }
   function addVisible(){
     const urls=filtered.slice(0,visibleLimit).map(n=>n.url);
@@ -111,7 +112,7 @@ export function EditorialDesk({domain,domainName,items,scopeLabel,editionType}:E
           method:'POST',
           headers:{'Content-Type':'application/json'},
           body:JSON.stringify({domain,editionType,items:selectedItems.map(n=>({url:n.url,title:n.title,date:n.date,source:n.source,type:n.type,summary:(n.summary||'').slice(0,450),language:n.language||''}))}),
-          signal:AbortSignal.timeout(45000)
+          signal:AbortSignal.timeout(65000)
         });
         if(response.status===401){
           window.location.assign('/auth/login?returnTo='+encodeURIComponent(location.pathname+location.search));
@@ -120,7 +121,7 @@ export function EditorialDesk({domain,domainName,items,scopeLabel,editionType}:E
         if(!response.ok){
           enrichmentNotice='网页增强服务响应 '+response.status+'，已使用现有摘要生成文档。';
         }else{
-          const result=await response.json() as {items?:Array<{url:string;pageUrl?:string;pageTitle?:string;pageDescription?:string;pageExcerpt?:string;pageFetchedAt?:string;pageStatus?:string;translatedTitle?:string;summaryZh?:string;keyPoints?:string[];aiEnhanced?:boolean}>;aiCount?:number;notice?:string};
+          const result=await response.json() as {items?:Array<{url:string;pageUrl?:string;pageTitle?:string;pageDescription?:string;pageExcerpt?:string;pageFetchedAt?:string;pageStatus?:string;translatedTitle?:string;summaryZh?:string;keyPoints?:string[];aiEnhanced?:boolean;evidenceQuote?:string;summaryBasis?:string}>;aiCount?:number;notice?:string};
           enrichedItems=selectedItems.map(n=>{
             const page=(result.items||[]).find(x=>x.url===n.url);
             return {...n,...(page||{}),summaryZh:page?.summaryZh||page?.pageDescription||(n.summary||'订阅源未提供摘要，请打开原文核对。'),pageStatus:page?.pageStatus||'未读取网页，保留现有订阅源信息'};
@@ -130,13 +131,13 @@ export function EditorialDesk({domain,domainName,items,scopeLabel,editionType}:E
         }
       }catch(e){
         enrichmentNotice=(e instanceof Error&&e.name==='TimeoutError')
-          ?'新闻网页增强超过 45 秒，已使用现有摘要生成文档。'
+          ?'新闻网页增强超过 65 秒，已使用现有摘要生成文档。'
           :'新闻网页增强服务暂不可用，已使用现有摘要生成文档。';
       }
       const {downloadWechatDocx}=await import('@/lib/wechat-docx');
       const filename=downloadWechatDocx({
         title:title.trim()||defaultTitle,
-        brand:'知域 ATLAS',
+        brand,
         domainName,
         editionType,
         scopeLabel,
@@ -144,6 +145,8 @@ export function EditorialDesk({domain,domainName,items,scopeLabel,editionType}:E
         items:enrichedItems,
         generatedAt:new Date().toISOString()
       });
+      const history=[...new Set([...exported,...selectedItems.flatMap(n=>n.relatedReports.map(report=>canonicalUrl(report.url)))])].slice(-500);
+      setExported(history);try{localStorage.setItem(historyKey,JSON.stringify(history));}catch{}
       const fetchedCount=enrichedItems.filter(n=>/网页正文已读取|已读取页面信息/.test(n.pageStatus||'')).length;
       setNotice('DOCX 已生成并开始下载：'+filename+'。已读取 '+fetchedCount+'/'+selectedItems.length+' 条网页，AI 中文总结 '+aiCount+'/'+selectedItems.length+' 条。'+(enrichmentNotice?' '+enrichmentNotice:'')+' 未能读取的条目会在文档中标注状态并保留原文入口。');
     }catch(e){
@@ -153,7 +156,7 @@ export function EditorialDesk({domain,domainName,items,scopeLabel,editionType}:E
 
   return <section className="editorial-desk" aria-label="微信公众号精选工作台">
     <div className="editorial-head">
-      <div><span className="eyebrow"><Sparkles size={14}/> EDITORIAL DESK / 精选与成刊</span><h2>公众号精选工作台</h2><p>先筛选，再编排。导出时逐条读取原网页，提取页面信息，并生成中文标题、摘要与要点；日报、周报、月报按当前时间筛选范围成刊。</p></div>
+      <div><span className="eyebrow"><Sparkles size={14}/> EDITORIAL DESK / 精选与成刊</span><h2>公众号精选工作台</h2><p>先筛选，再编排。导出时尝试读取公开原文；AI 概述保留支撑摘录，不以标题推断替代来源事实。日报、周报、月报按当前时间筛选范围成刊。</p></div>
       <button className="primary-button" onClick={exportDocx} disabled={exporting}><Download size={16}/>{exporting?'正在生成 DOCX…':'生成公众号 DOCX（'+selectedItems.length+' 条）'}</button>
     </div>
     <div className="editorial-stats">
@@ -162,18 +165,19 @@ export function EditorialDesk({domain,domainName,items,scopeLabel,editionType}:E
       <div><strong>{topSourceCount}</strong><span>一手/官方来源</span></div>
       <div><strong>{duplicateCount}</strong><span>标题/链接重复抑制</span></div>
     </div>
-    <div className="editorial-note"><Check size={16}/><span>规则化初筛（非模型事实核验） · 当前范围：{scopeLabel||'按上方资讯筛选'}</span><span className="editorial-note-tail">分值越高越优先，不代表真实性评级</span></div>
+    <div className="editorial-note"><Check size={16}/><span>规则化初筛 · 一手来源优先 · 当前范围：{scopeLabel||'按上方资讯筛选'}</span><span className="editorial-note-tail">分值越高越优先，不代表真实性评级</span></div>
     <div className="editorial-controls">
       <label className="editorial-search"><span>搜索候选</span><input type="search" value={search} onChange={e=>{setSearch(e.target.value);setVisibleLimit(10);}} placeholder="标题、来源、内容关键词"/></label>
       <label><span>来源层级</span><select value={source} onChange={e=>setSource(e.target.value)}>{['全部来源','官方/一手','专业媒体','新闻聚合','其他来源'].map(x=><option key={x}>{x}</option>)}</select></label>
       <label><span>内容类型</span><select value={type} onChange={e=>setType(e.target.value)}>{types.map(x=><option key={x}>{x}</option>)}</select></label>
       <label className="editorial-score-filter"><span>最低优先级分数：<b>{minScore}</b></span><input type="range" min="0" max="80" step="5" value={minScore} onChange={e=>{setMinScore(Number(e.target.value));setVisibleLimit(10);}}/></label>
       <label><span>排序</span><select value={sort} onChange={e=>setSort(e.target.value as 'score'|'date')}><option value="score">精选优先</option><option value="date">最新发布</option></select></label>
+      <label className="editorial-check"><input type="checkbox" checked={avoidExported} onChange={e=>setAvoidExported(e.target.checked)}/>自动精选避开近期已导出</label>
       <label className="editorial-check"><input type="checkbox" checked={onlySelected} onChange={e=>setOnlySelected(e.target.checked)}/>只看已选</label>
     </div>
     <div className="editorial-actions">
       <span><Filter size={15}/> 当前显示 {filtered.length} 条候选</span>
-      <div><button onClick={autoSelect}><Sparkles size={15}/>自动精选 6 条</button><button onClick={addVisible}><Check size={15}/>选择当前前 {Math.min(visibleLimit,filtered.length)} 条</button><button onClick={()=>{setSelected([]);setNotice('已清空本领域精选列表。');}}><Trash2 size={15}/>清空</button><button onClick={()=>setSort(sort==='score'?'date':'score')}><ArrowDownWideNarrow size={15}/>{sort==='score'?'改按时间':'改按优先级'}</button></div>
+      <div><button onClick={autoSelect}><Sparkles size={15}/>自动精选 {editionSize} 条</button><button onClick={addVisible}><Check size={15}/>选择当前前 {Math.min(visibleLimit,filtered.length)} 条</button><button onClick={()=>{setSelected([]);setNotice('已清空本领域精选列表。');}}><Trash2 size={15}/>清空</button><button onClick={()=>setSort(sort==='score'?'date':'score')}><ArrowDownWideNarrow size={15}/>{sort==='score'?'改按时间':'改按优先级'}</button></div>
     </div>
     <div className="editorial-items">
       {filtered.slice(0,visibleLimit).map(n=>{
@@ -197,6 +201,6 @@ export function EditorialDesk({domain,domainName,items,scopeLabel,editionType}:E
     </div>
     <details className="editorial-copy-settings"><summary>编辑微信公众号标题与导语</summary><div className="editorial-copy-fields"><label><span>公众号文章标题</span><input value={title||defaultTitle} onChange={e=>setTitle(e.target.value)} maxLength={100} placeholder="输入文章标题"/></label><label><span>导语 / 编者按（留空自动生成）</span><textarea value={lead} onChange={e=>setLead(e.target.value)} rows={3} placeholder="可编辑导语；留空时根据已选条目自动生成，不会补写未经来源支持的事实。"/></label></div></details>
     {notice&&<p className="editorial-message" role="status">{notice}</p>}
-    <p className="editorial-footnote">导出文件采用标准 Office Open XML DOCX，可编辑标题、段落及来源链接。导出内容按优先级排序，包含发布前核查清单；建议确认原文、版权和事实后再发布到公众号。</p>
+    <p className="editorial-footnote">导出文件采用标准 Office Open XML DOCX，可编辑标题、段落及来源链接。一件事一条，附关联报道与支撑摘录；建议确认原文、版权和事实后再发布到公众号。</p>
   </section>;
 }

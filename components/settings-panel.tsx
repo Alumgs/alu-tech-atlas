@@ -1,7 +1,7 @@
 'use client';
 import {useEffect,useState} from 'react';
 import {ArrowLeft,CheckCircle2,KeyRound,Palette,Save,ShieldCheck,SlidersHorizontal,LogOut} from 'lucide-react';
-import {defaultSiteSettings,type SiteSettings} from '@/lib/site-settings';
+import {defaultSiteSettings,sanitizeSiteSettings,type SiteSettings} from '@/lib/site-settings';
 
 export function SettingsPanel(){
   const [settings,setSettings]=useState<SiteSettings>(defaultSiteSettings);
@@ -19,7 +19,7 @@ export function SettingsPanel(){
     fetch('/api/admin/settings',{cache:'no-store'}).then(async r=>{
       const payload=await r.json().catch(()=>({})) as {error?:string;settings?:SiteSettings;sessionDays?:number};
       if(!r.ok)throw new Error(payload.error||'读取设置失败');
-      if(alive){setSettings({...defaultSiteSettings,...payload.settings});setSessionDays(payload.sessionDays||7);}
+      if(alive){setSettings(sanitizeSiteSettings(payload.settings));setSessionDays(payload.sessionDays||7);}
     }).catch(e=>{if(alive)setError(e instanceof Error?e.message:'读取设置失败');}).finally(()=>{if(alive)setLoading(false);});
     return()=>{alive=false;};
   },[]);
@@ -27,10 +27,10 @@ export function SettingsPanel(){
   async function saveSettings(){
     setSaving(true);setMessage('');setError('');
     try{
-      const r=await fetch('/api/admin/settings',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({settings})});
+      const r=await fetch('/api/admin/settings',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({settings,currentPassword})});
       const payload=await r.json().catch(()=>({})) as {error?:string;settings?:SiteSettings;sessionDays?:number};
       if(!r.ok)throw new Error(payload.error||'保存失败');
-      setSettings({...defaultSiteSettings,...payload.settings});
+      setSettings(sanitizeSiteSettings(payload.settings));
       setMessage('设置已保存并写入云端存储。');
     }catch(e){setError(e instanceof Error?e.message:'保存失败');}
     finally{setSaving(false);}
@@ -45,7 +45,7 @@ export function SettingsPanel(){
       const r=await fetch('/api/admin/password',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({currentPassword,newPassword})});
       const payload=await r.json().catch(()=>({})) as {error?:string;settings?:SiteSettings;sessionDays?:number};
       if(!r.ok)throw new Error(payload.error||'密码修改失败');
-      setMessage('密码已修改，所有设备的旧登录会话已撤销。正在返回登录页…');
+      setMessage('密码已修改；云端会话撤销通常在一分钟内传播到所有节点。正在返回登录页…');
       window.setTimeout(()=>window.location.assign('/auth/login'),900);
     }catch(e){setError(e instanceof Error?e.message:'密码修改失败');}
     finally{setSaving(false);}
@@ -55,7 +55,7 @@ export function SettingsPanel(){
     if(!window.confirm('确定退出所有设备吗？所有现有会话将失效。'))return;
     setSaving(true);setMessage('');setError('');
     try{
-      const r=await fetch('/api/admin/logout-all',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'});
+      const r=await fetch('/api/admin/logout-all',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({currentPassword})});
       const payload=await r.json().catch(()=>({})) as {error?:string;settings?:SiteSettings;sessionDays?:number};
       if(!r.ok)throw new Error(payload.error||'操作失败');
       window.location.assign('/auth/login');
@@ -76,6 +76,7 @@ export function SettingsPanel(){
     </section>
 
     {loading?<div className="settings-card">正在读取云端设置…</div>:<>
+    <section className="settings-card"><h2>管理操作确认</h2><p>保存设置、修改密码或撤销会话前，需再次验证当前访问密码。</p><label><span>当前访问密码</span><input type="password" maxLength={256} autoComplete="current-password" value={currentPassword} onChange={e=>setCurrentPassword(e.target.value)}/></label></section>
     <section className="settings-card">
       <div className="settings-section-title"><SlidersHorizontal/><div><h2>网站内容</h2><p>调整品牌文字和网站公告。</p></div></div>
       <div className="settings-form-grid">
@@ -97,21 +98,31 @@ export function SettingsPanel(){
         <label className="settings-toggle"><input type="checkbox" checked={settings.enableEditorialDesk} onChange={e=>update('enableEditorialDesk',e.target.checked)}/><span>显示公众号精选工作台</span></label>
       </div>
       <div className="settings-preview"><span style={{background:settings.accentColor}}/>样式预览：<b style={{color:settings.accentColor}}>{settings.siteTitle||'知域'} · 产业观察</b><span className="settings-preview-note">背景色与字体比例保存后应用</span></div>
-      <div className="settings-actions"><button className="settings-primary" onClick={saveSettings} disabled={saving}><Save size={16}/>{saving?'正在保存…':'保存网站设置'}</button><button onClick={()=>setSettings(defaultSiteSettings)}>恢复默认值</button></div>
+      <div className="settings-actions"><button className="settings-primary" onClick={saveSettings} disabled={saving||!currentPassword}><Save size={16}/>{saving?'正在保存…':'保存网站设置'}</button><button onClick={()=>setSettings(defaultSiteSettings)}>恢复默认值</button></div>
     </section>
 
     <section className="settings-card">
-      <div className="settings-section-title"><KeyRound/><div><h2>密码与登录安全</h2><p>修改前需验证当前密码。新密码至少 12 位，修改后所有设备旧会话失效。</p></div></div>
+      <div className="settings-section-title"><SlidersHorizontal/><div><h2>精选与原文提取</h2><p>控制自动成刊规模与来源处理。分值是阅读优先级，不代表真实性评级。</p></div></div>
       <div className="settings-form-grid">
-        <label><span>当前密码</span><input type="password" autoComplete="current-password" value={currentPassword} onChange={e=>setCurrentPassword(e.target.value)} /></label>
+        <label><span>自动精选最低分（0–90）</span><input type="number" min={0} max={90} value={settings.minEditorialScore} onChange={e=>update('minEditorialScore',Number(e.target.value))}/></label>
+        <label><span>每期自动精选条数（1–12）</span><input type="number" min={1} max={12} value={settings.editionSize} onChange={e=>update('editionSize',Number(e.target.value))}/></label>
+        <label className="settings-toggle"><input type="checkbox" checked={settings.enableAIEnrichment} onChange={e=>update('enableAIEnrichment',e.target.checked)}/><span>使用 AI 辅助中文摘要（保留支撑摘录）</span></label>
+        <label className="settings-toggle"><input type="checkbox" checked={settings.allowReaderFallback} onChange={e=>update('allowReaderFallback',e.target.checked)}/><span>原文直连失败时使用公共 Reader 提取服务</span></label>
+      </div><p>公共 Reader 仅处理资料目录中允许的公开文章网址；关闭后采用直连和订阅源摘要。</p>
+      <div className="settings-actions"><button className="settings-primary" onClick={saveSettings} disabled={saving||!currentPassword}><Save size={16}/>保存精选设置</button></div>
+    </section>
+
+    <section className="settings-card">
+      <div className="settings-section-title"><KeyRound/><div><h2>密码与登录安全</h2><p>修改前需验证当前密码。新密码至少 12 位，修改后云端撤销所有设备旧会话，节点传播通常约一分钟。</p></div></div>
+      <div className="settings-form-grid">
         <label><span>新密码（至少 12 个字符）</span><input type="password" autoComplete="new-password" minLength={12} maxLength={256} value={newPassword} onChange={e=>setNewPassword(e.target.value)} /></label>
         <label><span>确认新密码</span><input type="password" autoComplete="new-password" minLength={12} maxLength={256} value={confirmPassword} onChange={e=>setConfirmPassword(e.target.value)} /></label>
       </div>
-      <div className="settings-actions"><button className="settings-primary" disabled={saving||!currentPassword||!newPassword||!confirmPassword} onClick={changePassword}><KeyRound size={16}/>修改密码并退出其他设备</button><button className="settings-danger" disabled={saving} onClick={logoutAll}><LogOut size={16}/>退出所有设备</button></div>
+      <div className="settings-actions"><button className="settings-primary" disabled={saving||!currentPassword||!newPassword||!confirmPassword} onClick={changePassword}><KeyRound size={16}/>修改密码并退出其他设备</button><button className="settings-danger" disabled={saving||!currentPassword} onClick={logoutAll}><LogOut size={16}/>退出所有设备</button></div>
     </section>
     </>}
     {message&&<p className="settings-message" role="status">{message}</p>}
     {error&&<p className="settings-error" role="alert">{error}</p>}
-    <p className="settings-footnote">安全说明：设置接口由 Worker 服务端验证登录状态及请求来源；密码仅存储为 PBKDF2-SHA256 哈希。云端设置使用独立 KV 存储，不会暴露密码哈希给浏览器。</p>
+    <p className="settings-footnote">本站采用共享访问密码，管理操作需再次输入密码，请仅分享给信任的人。登录最长有效 7 天；密码与会话密钥以单条云端记录更新，全球节点撤销通常在一分钟内完成。密码哈希不会发送到浏览器。</p>
   </main>;
 }

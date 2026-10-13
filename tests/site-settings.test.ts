@@ -37,3 +37,8 @@ test('malformed site preferences fall back to validated values',()=>{
   const result=sanitizeSiteSettings(null);
   assert.deepEqual(result,defaultSiteSettings);
 });
+test('edition settings clamp input and preserve explicit privacy controls',()=>{
+ const preferences=sanitizeSiteSettings({minEditorialScore:500,editionSize:-10,enableAIEnrichment:false,allowReaderFallback:false});
+ assert.equal(preferences.minEditorialScore,90);assert.equal(preferences.editionSize,1);
+ assert.equal(preferences.enableAIEnrichment,false);assert.equal(preferences.allowReaderFallback,false);
+});

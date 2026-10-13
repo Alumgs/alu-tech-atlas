@@ -10,7 +10,7 @@ export function configured(env:AuthEnv){
 export async function verifyPassword(password:string,stored:string){
  const parts=stored.split('$');
  const scheme=parts[0],rounds=parts[1],salt=parts[2],expected=parts[3];
- if(scheme!=='pbkdf2-sha256'||rounds!=='100000'||!salt||!expected||password.length>256)return false;
+ if(typeof password!=='string'||!/^pbkdf2-sha256\$100000\$[a-f0-9]{32}\$[a-f0-9]{64}$/.test(stored)||scheme!=='pbkdf2-sha256'||rounds!=='100000'||!salt||!expected||password.length>256)return false;
  const key=await crypto.subtle.importKey('raw',encoder.encode(password),'PBKDF2',false,['deriveBits']);
  const actual=hex(await crypto.subtle.deriveBits({name:'PBKDF2',hash:'SHA-256',iterations:100000,salt:unhex(salt)},key,256));
  let diff=actual.length^expected.length;
@@ -29,6 +29,7 @@ async function key(env:AuthEnv){
  return crypto.subtle.importKey('raw',encoder.encode(env.ATLAS_SESSION_SECRET+':'+env.ATLAS_PASSWORD_HASH),{name:'HMAC',hash:'SHA-256'},false,['sign','verify']);
 }
 export async function issueSession(env:AuthEnv,now=Date.now()){
+ if(!configured(env))throw new Error('Authentication is not configured');
  const payload=String(Math.floor(now/1000)+SESSION_SECONDS)+'.'+crypto.randomUUID();
  return payload+'.'+hex(await crypto.subtle.sign('HMAC',await key(env),encoder.encode(payload)));
 }
@@ -49,5 +50,6 @@ export function sessionCookie(value:string,age=SESSION_SECONDS){
 export function sameOrigin(request:Request){return request.headers.get('Origin')===new URL(request.url).origin;}
 export function safeReturn(value:string|null){
  if(!value||!value.startsWith('/')||value.startsWith('//')||/[\\\r\n]/.test(value))return '/';
+ try{let decoded=value;for(let i=0;i<2;i++)decoded=decodeURIComponent(decoded);if(!decoded.startsWith('/')||decoded.startsWith('//')||/[\\\u0000-\u001f\u007f]/.test(decoded))return '/';}catch{return '/';}
  return value.startsWith('/auth/')?'/':value;
 }

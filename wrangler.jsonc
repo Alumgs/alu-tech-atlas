@@ -11,6 +11,7 @@
  "observability":{"enabled":true},
  "ratelimits":[
   {"name":"LOGIN_LIMITER","namespace_id":"410071","simple":{"limit":8,"period":60}},
-  {"name":"FEED_LIMITER","namespace_id":"410072","simple":{"limit":180,"period":60}}
+  {"name":"FEED_LIMITER","namespace_id":"410072","simple":{"limit":180,"period":60}},
+  {"name":"EDITORIAL_LIMITER","namespace_id":"410073","simple":{"limit":3,"period":60}}
  ]
 }

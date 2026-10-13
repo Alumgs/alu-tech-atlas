@@ -12,3 +12,8 @@ test('seven-day session cookie is issued by default',()=>{const cookie=sessionCo
 test('return URLs cannot leave the site',()=>{for(const p of ['https://evil.test','//evil.test','/\\evil.test','/\nabc','/auth/login'])assert.equal(safeReturn(p),'/');assert.equal(safeReturn('/?domain=robot&view=news'),'/?domain=robot&view=news');});
 test('login and logout require same-origin POST',()=>{assert.equal(sameOrigin(new Request('https://atlas.test/auth/login',{headers:{Origin:'https://evil.test'}})),false);assert.equal(sameOrigin(new Request('https://atlas.test/auth/login',{headers:{Origin:'https://atlas.test'}})),true);assert.equal(sameOrigin(new Request('https://atlas.test/auth/login')),false);});
 test('cookie is secure, host-only and HttpOnly',()=>{const cookie=sessionCookie('abc');assert.match(cookie,/^__Host-/);for(const marker of ['Secure','HttpOnly','SameSite=Strict','Path=/'])assert.ok(cookie.includes(marker));assert.equal(getCookie(new Request('https://atlas.test',{headers:{Cookie:'other=bad; __Host-atlas_session=abc'}})),'abc');});
+test('encoded return paths and malformed password records fail safely',async()=>{
+ for(const path of ['/%5c%5cevil.test','/%255c%255cevil.test','/%0d%0aevil','/%00','/%zz'])assert.equal(safeReturn(path),'/');
+ for(const value of ['pbkdf2-sha256$100000$x$00','pbkdf2-sha256$100000$aa$xx'])assert.equal(await verifyPassword(password,value),false);
+ await assert.rejects(()=>issueSession({}));
+});

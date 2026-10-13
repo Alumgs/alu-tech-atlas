@@ -1,5 +1,5 @@
-import {newArticles} from './new-content';
-import {deep} from './deep-content';
+import {newArticles} from './new-content.ts';
+import {deep} from './deep-content.ts';
 export type Domain='aidc'|'robot'|'ml';
 export type Article={id:string;domain:Domain;category:string;title:string;summary:string;level:string;minutes:number;sections:{title:string;text:string}[];checks:string[];source:string;sourceName:string;kind:'手册'|'案例';};
 const refs={
@@ -46,7 +46,7 @@ const rows:Row[]=[
 ];
 const baseArticles:Article[]=rows.map((r)=>({id:r[0],domain:r[1],category:r[2],title:r[3],summary:r[4],level:r[5],minutes:4,sections:[{title:'核心概念',text:r[6]},{title:'技术要点',text:r[7]},{title:'现场应用',text:r[8]}],checks:r[9],sourceName:refs[r[10]][0],source:refs[r[10]][1],kind:r[11]||'手册'}));
 export const articles:Article[]=[...baseArticles.map(a=>({...a,minutes:9,category:a.domain==='robot'?(['r02','r03','r05'].includes(a.id)?'硬件 · ':'软件 · ')+a.category:a.category,sections:[...a.sections,{title:'工作原理与系统约束',text:deep[a.id].principle},{title:'工程实现与验证',text:deep[a.id].engineering}]})),...newArticles];
-export type News={title:string;url:string;date:string;source:string;domain:Domain;type:string;summary?:string;historical?:boolean;topics?:string[];collectedAt?:string;stale?:boolean;feed?:string;region?:'cn';language?:'zh';sourceKind?:string};
+export type News={title:string;url:string;date:string;source:string;domain:Domain;type:string;summary?:string;historical?:boolean;topics?:string[];collectedAt?:string;stale?:boolean;feed?:string;feedId?:string;region?:'cn';language?:'zh';sourceKind?:string};
 export const curated:News[]=[
 {title:'NVIDIA FY2027 Q2：数据中心业务继续扩张',url:'https://nvidianews.nvidia.com/news/nvidia-announces-financial-results-for-second-quarter-fiscal-2027',date:'2026-08-26',source:'NVIDIA 官方财报',domain:'aidc',type:'企业财报',summary:'季度营收 962.21 亿美元；数据中心营收约 890 亿美元。注意财年与自然年口径。',historical:true},
 {title:'用 Isaac GR00T 构建端到端人形机器人策略',url:'https://developer.nvidia.com/blog/develop-humanoid-robot-policies-end-to-end-with-nvidia-isaac-gr00t/',date:'2026-07-07',source:'NVIDIA Developer',domain:'robot',type:'技术研究',summary:'官方开发工作流覆盖数据采集、仿真训练、验证与真实部署。',historical:true},

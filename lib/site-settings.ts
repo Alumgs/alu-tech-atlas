@@ -9,6 +9,10 @@ export type SiteSettings = {
   showOverviewMetrics: boolean;
   showMarketChart: boolean;
   enableEditorialDesk: boolean;
+  minEditorialScore: number;
+  editionSize: number;
+  enableAIEnrichment: boolean;
+  allowReaderFallback: boolean;
 };
 
 export const defaultSiteSettings: SiteSettings = {
@@ -22,6 +26,10 @@ export const defaultSiteSettings: SiteSettings = {
   showOverviewMetrics: true,
   showMarketChart: true,
   enableEditorialDesk: true,
+  minEditorialScore: 34,
+  editionSize: 6,
+  enableAIEnrichment: true,
+  allowReaderFallback: true,
 };
 
 const text = (value: unknown, fallback: string, max: number) =>
@@ -43,5 +51,9 @@ export function sanitizeSiteSettings(value: unknown): SiteSettings {
     showOverviewMetrics: source.showOverviewMetrics !== false,
     showMarketChart: source.showMarketChart !== false,
     enableEditorialDesk: source.enableEditorialDesk !== false,
+    minEditorialScore: typeof source.minEditorialScore==='number'&&Number.isFinite(source.minEditorialScore)?Math.max(0,Math.min(90,Math.round(source.minEditorialScore))):34,
+    editionSize: typeof source.editionSize==='number'&&Number.isFinite(source.editionSize)?Math.max(1,Math.min(12,Math.round(source.editionSize))):6,
+    enableAIEnrichment: source.enableAIEnrichment!==false,
+    allowReaderFallback: source.allowReaderFallback!==false,
   };
 }

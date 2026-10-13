@@ -1,7 +1,7 @@
 const base=process.env.ATLAS_BASE_URL;
 if(!base)throw Error('ATLAS_BASE_URL is required');
 const origin=new URL(base).origin;
-const request=(path,init={})=>fetch(new URL(path,base),{redirect:'manual',...init});
+const request=(path,init={})=>fetch(new URL(path,base),{redirect:'manual',signal:AbortSignal.timeout(30000),...init});
 const must=(condition,message)=>{if(!condition)throw Error(message);};
 let info;
 for(let attempt=1;attempt<=6;attempt++){
@@ -11,7 +11,7 @@ for(let attempt=1;attempt<=6;attempt++){
  if(attempt===6)throw Error('health endpoint invalid: status='+health.status+', content-type='+contentType+', location='+String(health.headers.get('location')));
  await new Promise(r=>setTimeout(r,1500));
 }
-must(info?.ok&&info?.authConfigured&&info?.version==='4.0.0'&&info?.settingsStorage,'health, auth or KV settings configuration failed');
+must(info?.ok&&info?.authConfigured&&info?.version==='4.1.0'&&info?.settingsStorage,'health, auth or KV settings configuration failed');
 for(const path of ['/','/settings','/case-study','/read/a04','/aidc.jpg']){
  const r=await request(path);
  must(r.status===302&&r.headers.get('location')?.startsWith('/auth/login'),'anonymous path is not protected: '+path);
@@ -43,6 +43,8 @@ if(process.env.ATLAS_ACCESS_PASSWORD){
   const admin=await request('/api/admin/settings',{headers:{Cookie:cookie}});
   const settings=await admin.json();
   must(admin.ok&&settings.settings&&settings.sessionDays===7&&settings.storage==='cloudflare-kv','admin settings API contract failed');
+  const noReauth=await request('/api/admin/settings',{method:'POST',headers:{Cookie:cookie,Origin:origin,'Content-Type':'application/json'},body:JSON.stringify({settings:settings.settings})});
+  must(noReauth.status===403,'settings mutation accepted without current-password confirmation');
   const home=await request('/',{headers:{Cookie:cookie}});
   const homeHtml=await home.text();
   const cssPath=homeHtml.match(/href=["']([^"']+\.css)["']/)?.[1];

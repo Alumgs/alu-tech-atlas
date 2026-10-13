@@ -3,18 +3,24 @@ import {configured,verifyPassword,hashPassword,issueSession,validSession,getCook
 import {loginPage} from './login';
 import {defaultSiteSettings,sanitizeSiteSettings} from '../lib/site-settings';
 import {editorialEnrich,type EditorialEnv} from './editorial';
+import {boundedJson,RequestError} from '../lib/http-safety';
 interface Env extends AuthEnv {
  LOGIN_LIMITER:{limit(options:{key:string}):Promise<{success:boolean}>};
  FEED_LIMITER:{limit(options:{key:string}):Promise<{success:boolean}>};
+ EDITORIAL_LIMITER:{limit(options:{key:string}):Promise<{success:boolean}>};
  ASSETS:Fetcher;
  ATLAS_SETTINGS?:KVNamespace;
  AI?:EditorialEnv['AI'];
+ ATLAS_RELEASE?:string;
 }
 function protect(response:Response){
  const headers=new Headers(response.headers);
  headers.set('Cache-Control','private, no-store');headers.set('X-Content-Type-Options','nosniff');
  headers.set('Referrer-Policy','strict-origin-when-cross-origin');headers.set('X-Frame-Options','DENY');
- headers.set('Content-Security-Policy',"frame-ancestors 'none'; object-src 'none'; base-uri 'self'; form-action 'self'");
+ headers.set('Content-Security-Policy',"default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self'; frame-src 'none'; worker-src 'none'; frame-ancestors 'none'; object-src 'none'; base-uri 'self'; form-action 'self'");
+ headers.set('Strict-Transport-Security','max-age=31536000; includeSubDomains');
+ headers.set('Cross-Origin-Resource-Policy','same-origin');
+ headers.set('X-Robots-Tag','noindex, nofollow, noarchive');
  headers.set('Permissions-Policy','camera=(), microphone=(), geolocation=()');
  return new Response(response.body,{status:response.status,statusText:response.statusText,headers});
 }
@@ -23,6 +29,12 @@ const randomSecret=()=>Array.from(crypto.getRandomValues(new Uint8Array(32)),b=>
 async function effectiveAuthEnv(env:Env):Promise<AuthEnv>{
  if(!env.ATLAS_SETTINGS)return env;
  try{
+  const state=await env.ATLAS_SETTINGS.get('auth-state-v1');
+  if(state){
+   const value=JSON.parse(state) as {passwordHash?:string;sessionSecret?:string};
+   const resolved={ATLAS_PASSWORD_HASH:value.passwordHash,ATLAS_SESSION_SECRET:value.sessionSecret};
+   return configured(resolved)?resolved:{ATLAS_PASSWORD_HASH:'',ATLAS_SESSION_SECRET:''};
+  }
   const [passwordHash,sessionSecret]=await Promise.all([env.ATLAS_SETTINGS.get('auth-password-hash'),env.ATLAS_SETTINGS.get('auth-session-secret')]);
   return {...env,ATLAS_PASSWORD_HASH:passwordHash||env.ATLAS_PASSWORD_HASH,ATLAS_SESSION_SECRET:sessionSecret||env.ATLAS_SESSION_SECRET};
  }catch{
@@ -30,13 +42,7 @@ async function effectiveAuthEnv(env:Env):Promise<AuthEnv>{
   return {...env,ATLAS_PASSWORD_HASH:'',ATLAS_SESSION_SECRET:''};
  }
 }
-async function readBody(request:Request){
- const length=Number(request.headers.get('Content-Length')||0);
- if(length>20000)throw new Error('请求内容过大');
- const value=await request.json();
- if(!value||typeof value!=='object'||Array.isArray(value))throw new Error('请求格式无效');
- return value as Record<string,unknown>;
-}
+const readBody=boundedJson;
 const json=(value:unknown,status=200,headers:HeadersInit={})=>Response.json(value,{status,headers:{'Cache-Control':'private, no-store',...Object.fromEntries(new Headers(headers))}});
 async function adminApi(request:Request,env:Env,authEnv:AuthEnv){
  const path=new URL(request.url).pathname,kv=env.ATLAS_SETTINGS;
@@ -51,27 +57,29 @@ async function adminApi(request:Request,env:Env,authEnv:AuthEnv){
  }
  if(request.method!=='POST')return json({error:'请求方法不支持。'},405,{Allow:'GET, POST'});
  if(!sameOrigin(request))return json({error:'请求来源不符。'},403);
+ const ip=request.headers.get('CF-Connecting-IP')||'unknown';
+ const challenge=await env.LOGIN_LIMITER.limit({key:'atlas-admin-verify:'+ip});
+ if(!challenge.success)return json({error:'管理操作过于频繁，请一分钟后重试。'},429,{'Retry-After':'60'});
  let body:Record<string,unknown>;
- try{body=await readBody(request);}catch(e){return json({error:e instanceof Error?e.message:'请求格式无效。'},400);}
+ try{body=await readBody(request);}catch(e){return json({error:e instanceof Error?e.message:'请求格式无效。'},e instanceof RequestError?e.status:400);}
+ const current=typeof body.currentPassword==='string'?body.currentPassword:'';
+ if(!await verifyPassword(current,authEnv.ATLAS_PASSWORD_HASH||''))return json({error:'请验证当前访问密码后再进行管理操作。'},403);
  if(path==='/api/admin/settings'){
   const settings=sanitizeSiteSettings(body.settings);
   try{await kv.put('public-settings',JSON.stringify(settings));return json({ok:true,settings});}
   catch{return json({error:'保存设置失败，请检查 KV 存储权限或稍后重试。'},503);}
  }
  if(path==='/api/admin/password'){
-  const current=typeof body.currentPassword==='string'?body.currentPassword:'';
   const next=typeof body.newPassword==='string'?body.newPassword:'';
   if(next.length<12||next.length>256)return json({error:'新密码必须为 12–256 个字符。'},400);
-  if(!await verifyPassword(current,authEnv.ATLAS_PASSWORD_HASH||''))return json({error:'当前密码不正确。'},401);
   try{
-   await kv.put('auth-password-hash',await hashPassword(next));
-   await kv.put('auth-session-secret',randomSecret());
+   await kv.put('auth-state-v1',JSON.stringify({passwordHash:await hashPassword(next),sessionSecret:randomSecret()}));
    return json({ok:true,reauthenticate:true},200,{'Set-Cookie':sessionCookie('',0)});
   }catch{return json({error:'密码保存失败，请稍后重试。'},503);}
  }
  if(path==='/api/admin/logout-all'){
   try{
-   await kv.put('auth-session-secret',randomSecret());
+   await kv.put('auth-state-v1',JSON.stringify({passwordHash:authEnv.ATLAS_PASSWORD_HASH,sessionSecret:randomSecret()}));
    return json({ok:true},200,{'Set-Cookie':sessionCookie('',0)});
   }catch{return json({error:'会话撤销失败，请稍后重试。'},503);}
  }
@@ -89,8 +97,10 @@ export default {
  async fetch(request:Request,env:Env,ctx:ExecutionContext){
   const url=new URL(request.url),path=url.pathname;
   let result:Response;
+  if(!['GET','HEAD'].includes(request.method)&&!sameOrigin(request))return protect(json({error:'请求来源不符。'},403));
+  if(path==='/api/health'&&!['GET','HEAD'].includes(request.method))return protect(json({error:'仅支持 GET 或 HEAD。'},405,{Allow:'GET, HEAD'}));
   const authEnv=await effectiveAuthEnv(env);
-  if(path==='/api/health')return protect(Response.json({ok:true,service:'alu-tech-atlas',version:'4.0.0',platform:'cloudflare-workers',authConfigured:configured(authEnv),settingsStorage:Boolean(env.ATLAS_SETTINGS)}));
+  if(path==='/api/health')return protect(Response.json({ok:true,service:'alu-tech-atlas',version:'4.1.0',release:env.ATLAS_RELEASE||'',platform:'cloudflare-workers',authConfigured:configured(authEnv),settingsStorage:Boolean(env.ATLAS_SETTINGS),sessionDays:7}));
   if(!configured(authEnv))return protect(new Response('网站正在完成访问配置，请稍后再试。',{status:503,headers:{'Content-Type':'text/plain; charset=utf-8'}}));
   if(path==='/auth/login'){
    if(request.method==='GET')result=html('',safeReturn(url.searchParams.get('returnTo')));
@@ -117,7 +127,12 @@ export default {
    }else if(path==='/api/editorial/enrich'){
     if(request.method!=='POST')result=json({error:'仅支持 POST。'},405,{Allow:'POST'});
     else if(!sameOrigin(request))result=json({error:'请求来源不符。'},403);
-    else {const limited=await env.FEED_LIMITER.limit({key:'atlas-editorial:'+getCookie(request).slice(0,48)});result=limited.success?await editorialEnrich(request,env):json({error:'请求频率过高，请稍后重试。'},429,{'Retry-After':'60'});}
+    else {const limited=await env.EDITORIAL_LIMITER.limit({key:'atlas-editorial:'+getCookie(request).slice(0,48)});if(!limited.success)result=json({error:'原文提取每分钟最多 3 次，请稍后再导出。'},429,{'Retry-After':'60'});else{
+     let preferences=defaultSiteSettings;
+     try{const raw=await env.ATLAS_SETTINGS?.get('public-settings');if(raw)preferences=sanitizeSiteSettings(JSON.parse(raw));}
+     catch{return protect(json({error:'读取精选设置失败，请稍后重试。'},503));}
+     result=await editorialEnrich(request,{AI:env.AI,allowReaderFallback:preferences.allowReaderFallback,enableAIEnrichment:preferences.enableAIEnrichment});
+    }}
    }else if(path.startsWith('/_next/static/')||path==='/favicon.svg'){
     result=await env.ASSETS.fetch(request);
    }else if(path.startsWith('/api/')&&!await env.FEED_LIMITER.limit({key:'atlas-feed:'+getCookie(request).slice(0,48)}).then(r=>r.success)){

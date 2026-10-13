@@ -1,61 +1,15 @@
+import {boundedText} from '@/lib/http-safety';
+import {canonicalUrl} from '@/lib/url-safety';
+import {parseFeed} from '@/lib/feed-parser';
 import {sources,type News,type Domain,type FeedSource} from '@/lib/content';
 export const dynamic='force-dynamic';
 
 type FeedStatus={name:string;domain:string;ok:boolean;count:number;error?:string;warning?:string;fallback?:boolean;checkedAt:string;latestPublishedAt?:string;durationMs?:number};
 type Payload={items:News[];statuses:FeedStatus[];checkedAt:string};
-let memory:{at:number;day:string;data:Payload}|undefined;
 const feedMemory=new Map<string,{at:number;day:string;data:Payload}>();
 const lastGood=new Map<string,News[]>();
+const feedInFlight=new Map<string,Promise<Payload>>();
 const day=()=>new Date().toLocaleDateString('en-CA',{timeZone:'Asia/Shanghai'});
-
-function decode(s:string){
- return s.replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g,'$1').replace(/&nbsp;/gi,' ').replace(/&amp;/gi,'&').replace(/&quot;/gi,'"').replace(/&apos;|&#39;/gi,"'").replace(/&lt;/gi,'<').replace(/&gt;/gi,'>').replace(/&#(\d+);/g,(_,n)=>{const c=Number(n);return c>=0&&c<=1114111?String.fromCodePoint(c):' ';}).replace(/&#x([0-9a-f]+);/gi,(_,n)=>{const c=parseInt(n,16);return c>=0&&c<=1114111?String.fromCodePoint(c):' ';});
-}
-function clean(s:string){
- const markup=s.replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g,'$1').replace(/<script\b[^>]*>[\s\S]*?<\/script\s*>/gi,' ').replace(/<style\b[^>]*>[\s\S]*?<\/style\s*>/gi,' ').replace(/<[^>]*>/g,' ');
- return decode(markup).replace(/[\t\f\v ]+/g,' ').replace(/\s*\n\s*/g,' ').trim();
-}
-function tag(s:string,n:string){
- return clean(s.match(new RegExp('<'+n+'(?:\\s[^>]*)?>([\\s\\S]*?)<\\/'+n+'\\s*>','i'))?.[1]||'');
-}
-function attrs(s:string){const out:Record<string,string>={};for(const m of s.matchAll(/([\w:-]+)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))/g))out[m[1].toLowerCase()]=decode(m[2]??m[3]??m[4]??'');return out;}
-function itemLink(block:string){
- const linkTags=[...block.matchAll(/<link\b([^>]*)\/?>/gi)].map(m=>attrs(m[1]));
- const hrefs=linkTags.filter(a=>a.href);
- const preferred=hrefs.find(a=>(a.rel||'').toLowerCase()==='alternate')||hrefs.find(a=>!(a.rel||'').toLowerCase().split(/\s+/).includes('self'))||hrefs[0];
- const textLink=tag(block,'link');
- const value=/^https?:\/\//i.test(textLink)?textLink:preferred?.href||'';
- return decode(value).trim();
-}
-function parseFeed(raw:string,source:FeedSource,checkedAt:string,fallback=false):News[]{
- const blocks=raw.match(/<item(?:\s[^>]*)?>[\s\S]*?<\/item\s*>|<entry(?:\s[^>]*)?>[\s\S]*?<\/entry\s*>/gi)||[];
- if(!blocks.length&&!/<(?:rss|feed|rdf:rdf)\b/i.test(raw))throw new Error('响应内容不是 RSS/Atom/XML');
- const results:News[]=[];
- for(const b of blocks.slice(0,180)){
-  const title=tag(b,'title').slice(0,350),url=itemLink(b);
-  const rawDate=tag(b,'pubDate')||tag(b,'published')||tag(b,'updated')||tag(b,'dc:date')||tag(b,'date')||tag(b,'dcterms:created');
-  const time=Date.parse(rawDate);
-  if(!title||!/^https?:\/\//i.test(url)||!Number.isFinite(time)||time>Date.now()+300000)continue;
-  const rawDescription=tag(b,'description')||tag(b,'summary')||tag(b,'content:encoded')||tag(b,'content')||'';
-  const description=clean(rawDescription).slice(0,1000);
-  const context=(title+' '+description).slice(0,1800);
-  const world=/world.model|世界模型|cosmos|v-jepa|genie|dreamerv?3/i.test(context);
-  const robot=/robot|humanoid|isaac|gr00t|embodied|manipulat|机器人|具身/i.test(context)||world;
-  const aidc=/financial|earnings|quarter.*results|data cent|datacent|AI factor|Blackwell|Rubin|network|GPU|cooling|液冷|智算|服务器|数据中心|算力|昇腾|光模块|超节点|semiconductor|chip|infrastructure/i.test(context);
-  const ml=/language model|LLM|agent|inference|fine.tun|quantiz|distill|machine learn|大模型|智能体|小模型|模型|人工智能|深度学习|推理|开源|通义|千问|DeepSeek|artificial intelligence|\bAI\b/i.test(context);
-  const domains:Domain[]=source.domain==='both'?([...aidc?['aidc' as Domain]:[],...robot?['robot' as Domain]:[],...ml?['ml' as Domain]:[]]):[source.domain as Domain];
-  const type=/financial|earnings|quarter.*results|财报|营收|业绩/i.test(title)?'企业财报':source.type==='研究论文'?'研究论文':/发布|推出|launch|introduc|release/i.test(title)&&source.type!=='市场洞察'?'产品发布':source.type;
-  if(!domains.length)continue;
-  const sourceTag=tag(b,'source');
-  const sourceKind=fallback?'新闻聚合':source.kind||(source.url.includes('news.google.com')?'新闻聚合':undefined);
-  for(const domain of domains)results.push({
-   title,url,date:new Date(time).toISOString(),source:sourceTag||source.name,feed:fallback?'Google News · 兜底索引':source.name,
-   language:source.language,sourceKind,region:/中国|国内|工信部|信通院|华为|昇腾|浪潮|中科曙光|新华三|寒武纪|中际旭创|英维克|润泽科技|数据港|宇树|优必选|智元|傅立叶|埃斯顿|汇川|绿的谐波|三花智控|智源|上海人工智能实验室|北京人形|阿里|通义|千问|百度|文心|腾讯|字节|豆包|智谱|月之暗面|科大讯飞|商汤|深度求索|DeepSeek|Qwen|Unitree|UBTECH|MiniMax|Kimi/i.test(context)?'cn':undefined,
-   domain,type,summary:description||undefined,collectedAt:checkedAt,topics:world?['world']:[]
-  });
- }
- return results.sort((a,b)=>Date.parse(b.date)-Date.parse(a.date)).slice(0,120);
-}
 
 const fallbackQueries:Record<string,string>={
  'TechCrunch · AI':'site:techcrunch.com/category/artificial-intelligence (AI OR artificial intelligence OR machine learning)',
@@ -94,7 +48,7 @@ async function fetchFeed(url:string,source:FeedSource,checkedAt:string,timeoutMs
   'User-Agent':'KnowledgeAtlas/4.1 (public RSS research reader)'
  }});
  if(!r.ok)throw new Error('HTTP '+r.status);
- const raw=await r.text();
+ const raw=await boundedText(r,2000000);
  if(raw.length>5000000)throw new Error('订阅内容过大');
  const items=parseFeed(raw,source,checkedAt,fallback);
  if(!items.length)throw new Error('订阅有响应，但未解析到带有效日期、正文链接和相关内容的条目');
@@ -140,7 +94,7 @@ async function collect(selected:FeedSource[]=sources):Promise<Payload>{
   }
  });
  const seen=new Set<string>();
- const items=results.flatMap(r=>r.items).filter(n=>{const key=n.domain+'|'+n.url;if(seen.has(key))return false;seen.add(key);return true;}).sort((a,b)=>Date.parse(b.date)-Date.parse(a.date));
+ const items=results.flatMap(r=>r.items).filter(n=>{const key=n.domain+'|'+canonicalUrl(n.url);if(seen.has(key))return false;seen.add(key);return true;}).sort((a,b)=>Date.parse(b.date)-Date.parse(a.date));
  return {items,statuses:results.map(r=>r.status),checkedAt};
 }
 export async function GET(request:Request){
@@ -149,13 +103,18 @@ export async function GET(request:Request){
  if(index!==null){
   if(!/^\d+$/.test(index)||!sources[Number(index)])return Response.json({error:'未知来源'},{status:400,headers});
   const source=sources[Number(index)],cached=feedMemory.get(source.name);
-  if(!force&&cached&&cached.day===day()&&Date.now()-cached.at<3600000)return Response.json({...cached.data,cached:true},{headers});
-  const data=await collect([source]);
+  if(cached&&cached.day===day()&&Date.now()-cached.at<(force?15000:900000))return Response.json({...cached.data,cached:true},{headers});
+  let pending=feedInFlight.get(source.name);
+  if(!pending){pending=collect([source]).finally(()=>feedInFlight.delete(source.name));feedInFlight.set(source.name,pending);}
+  const data=await pending;
   if(data.statuses[0].ok)feedMemory.set(source.name,{at:Date.now(),day:day(),data});
   return Response.json({...data,cached:false},{headers});
  }
- if(!force&&memory&&memory.day===day()&&Date.now()-memory.at<60000)return Response.json({...memory.data,cached:true},{headers});
- const data=await collect();
- if(data.statuses.some(s=>s.ok))memory={at:Date.now(),day:day(),data};
- return Response.json({...data,cached:false},{headers});
+ // Aggregate only already collected source caches. A refresh must identify a source;
+ // this prevents one request from opening every external feed and exhausting quotas.
+ const snapshots=[...feedMemory.values()].map(x=>x.data);
+ if(!snapshots.length)return Response.json({error:'请指定 source 索引获取来源；批量结果仅返回已采集缓存。'},{status:400,headers});
+ const unique=new Map<string,News>();
+ for(const cached of feedMemory.values())for(const n of cached.data.items)unique.set(n.domain+'|'+canonicalUrl(n.url),{...n,stale:Date.now()-cached.at>900000||n.stale});
+ return Response.json({items:[...unique.values()],statuses:snapshots.flatMap(x=>x.statuses),checkedAt:new Date().toISOString(),cached:true},{headers});
 }

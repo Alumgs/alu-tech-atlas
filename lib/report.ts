@@ -4,10 +4,12 @@ import type {Indicators} from './indicators';
 import {sourceCatalog} from './source-catalog';
 import {domainNames,frameworks,evidenceTopics} from './research-framework';
 import {rankNews,scoreNews} from './editorial';
+import {publicationLabel} from './publication-time';
+import {publicUrl} from './url-safety';
 export type ReportInput={domain:Domain;items:News[];updates:UpdateResult|null;indicators:Indicators|null;region:string;age:string;loading:boolean};
 const esc=(s:unknown)=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]!));
-const safe=(s:string)=>/^https?:\/\//i.test(s)?esc(s):'#';
-const stamp=(s:string)=>new Date(s).toLocaleString('zh-CN',{timeZone:'Asia/Shanghai',hour12:false});
+const safe=(s:string)=>publicUrl(s)?esc(s):'#';
+const stamp=publicationLabel;
 export function reportStats(items:News[]){const counts=new Map<string,number>();for(const n of items)counts.set(n.type,(counts.get(n.type)||0)+1);return [...counts].sort((a,b)=>b[1]-a[1]);}
 export function createReport(input:ReportInput){
  const {domain,updates,indicators}=input;const now=new Date().toISOString(),name=domainNames[domain],f=frameworks[domain];

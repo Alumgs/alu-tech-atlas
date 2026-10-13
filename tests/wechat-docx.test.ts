@@ -36,3 +36,10 @@ test('Word export includes page-read status and links to the fetched canonical p
   assert.ok(text.includes('https://news.example.com/article'));
   assert.ok(text.includes('ATLAS 周报'));
 });
+test('DOCX excludes duplicate tracking links, escapes XML and preserves supporting reports',async()=>{
+ const item={title:'来源标题\u0000<script>text</script>',url:'https://example.com/a?utm_source=mail',date:'2026-10-13T00:00:00Z',source:'来源',domain:'aidc' as const,type:'技术研究',summary:'可信材料摘要',evidenceQuote:'仅保留来源已提供的文字',relatedReports:[{title:'同一报道',url:'https://example.org/a',date:'2026-10-13T00:00:00Z',source:'另一个来源',domain:'aidc' as const,type:'技术研究'}]};
+ const blob=createWechatDocxBlob({title:'工程观察',domainName:'AIDC',items:[item,{...item,url:'https://example.com/a?utm_source=share'}]});
+ const xml=new TextDecoder().decode(await blob.arrayBuffer());
+ assert.ok(xml.includes('本期精选 1 条'));assert.ok(xml.includes('&lt;script&gt;'));assert.ok(!xml.includes('来源标题\u0000'));
+ assert.ok(xml.includes('支撑摘录'));assert.ok(xml.includes('https://example.org/a'));
+});

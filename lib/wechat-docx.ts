@@ -1,6 +1,9 @@
 import type {News} from './content';
+import {publicUrl,canonicalUrl} from './url-safety.ts';
+import {dedupeStories} from './editorial.ts';
+import {publicationLabel} from './publication-time.ts';
 
-export type EnrichedNews = News & {pageUrl?:string;pageTitle?:string;pageDescription?:string;pageExcerpt?:string;pageFetchedAt?:string;pageStatus?:string;translatedTitle?:string;summaryZh?:string;keyPoints?:string[];aiEnhanced?:boolean};
+export type EnrichedNews = News & {pageUrl?:string;pageTitle?:string;pageDescription?:string;pageExcerpt?:string;pageFetchedAt?:string;pageStatus?:string;translatedTitle?:string;summaryZh?:string;keyPoints?:string[];aiEnhanced?:boolean;evidenceQuote?:string;summaryBasis?:string;relatedReports?:News[]};
 
 export type WeChatDocxInput = {
   title: string;
@@ -15,12 +18,9 @@ export type WeChatDocxInput = {
 };
 
 const enc = new TextEncoder();
-const xml = (value: unknown) => String(value ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&apos;');
-const stamp = (value: string) => {
-  const time = Date.parse(value);
-  return Number.isFinite(time) ? new Date(time).toLocaleString('zh-CN', {timeZone: 'Asia/Shanghai', hour12: false}) : '发布时间未核实';
-};
-const safeUrl = (url: string) => /^https?:\/\//i.test(url) ? url : '';
+const xml = (value: unknown) => String(value ?? '').replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\ufffe\uffff]/g,'').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&apos;');
+const stamp=publicationLabel;
+const safeUrl = (url: string) => publicUrl(url)?.toString()||'';
 
 function run(text: string, options = '') {
   return '<w:r>' + (options ? '<w:rPr>' + options + '</w:rPr>' : '') + '<w:t xml:space="preserve">' + xml(text) + '</w:t></w:r>';
@@ -41,7 +41,7 @@ function sourceAdvice(n: News) {
 }
 
 export function createWechatDocxBlob(input: WeChatDocxInput): Blob {
-  const picked = input.items.slice(0, 30);
+  const picked = dedupeStories(input.items).slice(0,30) as EnrichedNews[];
   const generated = input.generatedAt || new Date().toISOString();
   const typeNames = [...new Set(picked.map(n => n.type).filter(Boolean))];
   const autoLead = '本期围绕' + input.domainName + '，从知域 ATLAS 当前资讯池中整理出 ' + picked.length +
@@ -53,7 +53,7 @@ export function createWechatDocxBlob(input: WeChatDocxInput): Blob {
   const brand = input.brand || '知域 ATLAS';
   body.push(paragraph(input.title.trim() || (input.domainName + '精选观察'), 'Title', 'center'));
   body.push(paragraph(brand + ' · ' + input.domainName + ' · ' + (input.editionType||'精选观察') + ' · ' + new Date(generated).toLocaleDateString('zh-CN', {timeZone:'Asia/Shanghai'}), 'Subtitle', 'center'));
-  body.push(paragraph('本期精选 ' + picked.length + ' 条 · 原文时间按北京时间展示', 'Metadata', 'center'));
+  body.push(paragraph('本期精选 ' + picked.length + ' 条 · 精确时间转为北京时间，仅日期的资料保持原文日期', 'Metadata', 'center'));
   if(input.scopeLabel)body.push(paragraph('统计范围：'+input.scopeLabel,'Metadata','center'));
   body.push(paragraph('导读', 'Heading1'));
   body.push(paragraph(lead));
@@ -67,7 +67,8 @@ export function createWechatDocxBlob(input: WeChatDocxInput): Blob {
     if(n.pageUrl&&safeUrl(n.pageUrl)&&n.pageUrl!==n.url){const pageRid='rId'+(relationships.length+2);relationships.push('<Relationship Id="'+pageRid+'" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink" Target="'+xml(n.pageUrl)+'" TargetMode="External"/>');body.push(linkParagraph('读取到的网页地址：'+n.pageUrl,pageRid));}
     if(n.pageDescription)body.push(paragraph('网页导语：'+n.pageDescription,'Metadata'));
     const summary = (n.summaryZh || n.pageDescription || n.summary || '').trim() || '页面未提取到可用摘要。发布前请打开原文，核对事件背景、关键参数与适用范围。';
-    body.push(paragraph((n.aiEnhanced?'中文总结：':'摘要（未生成 AI 汉化时保留来源文本）：') + summary));
+    body.push(paragraph((n.aiEnhanced?'AI 辅助概述（未经独立事实核验）：':'摘要（未生成 AI 汉化时保留来源文本）：') + summary));
+    if(n.evidenceQuote)body.push(paragraph('支撑摘录（'+(n.summaryBasis||'来源素材')+'）：'+n.evidenceQuote,'Callout'));
     (n.keyPoints||[]).slice(0,4).forEach((point,pointIndex)=>body.push(paragraph('要点 '+(pointIndex+1)+'：'+point)));
     if(n.pageExcerpt)body.push(paragraph('网页正文摘录：'+n.pageExcerpt.slice(0,360),'Callout'));
     body.push(paragraph('网页读取状态：'+(n.pageStatus||'未提供')+(n.pageFetchedAt?' · 抓取于 '+stamp(n.pageFetchedAt):''),'Metadata'));
@@ -77,6 +78,14 @@ export function createWechatDocxBlob(input: WeChatDocxInput): Blob {
       const rid = 'rId' + (relationships.length + 2);
       relationships.push('<Relationship Id="' + rid + '" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink" Target="' + xml(url) + '" TargetMode="External"/>');
       body.push(linkParagraph('阅读原始资料：' + url, rid));
+    }
+    const related=(n.relatedReports||[]).filter(report=>canonicalUrl(report.url)!==canonicalUrl(n.url));
+    if(related.length)body.push(paragraph('关联报道（并不代表已独立核验）：','Metadata'));
+    for(const report of related.slice(0,8)){
+      const reportUrl=safeUrl(report.url);if(!reportUrl)continue;
+      const rid='rId'+(relationships.length+2);
+      relationships.push('<Relationship Id="'+rid+'" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink" Target="'+xml(reportUrl)+'" TargetMode="External"/>');
+      body.push(linkParagraph(report.source+' · '+stamp(report.date)+' · '+reportUrl,rid));
     }
     body.push(paragraph(''));
   });
@@ -99,9 +108,9 @@ export function createWechatDocxBlob(input: WeChatDocxInput): Blob {
     '<w:sectPr><w:pgSz w:w="11906" w:h="16838"/><w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440" w:header="720" w:footer="720" w:gutter="0"/></w:sectPr></w:body></w:document>';
   const stylesXml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
     '<w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">' +
-    '<w:docDefaults><w:rPrDefault><w:rPr><w:rFonts w:ascii="Aptos" w:hAnsi="Aptos" w:eastAsia="Microsoft YaHei"/><w:sz w:val="22"/><w:lang w:val="zh-CN" w:eastAsia="zh-CN"/></w:rPr></w:rPrDefault><w:pPrDefault><w:pPr><w:spacing w:after="140" w:line="360" w:lineRule="auto"/></w:pPr></w:pPrDefault></w:docDefaults>' +
+    '<w:docDefaults><w:rPrDefault><w:rPr><w:rFonts w:ascii="Arial" w:hAnsi="Arial" w:eastAsia="Microsoft YaHei"/><w:sz w:val="22"/><w:lang w:val="zh-CN" w:eastAsia="zh-CN"/></w:rPr></w:rPrDefault><w:pPrDefault><w:pPr><w:spacing w:after="140" w:line="360" w:lineRule="auto"/></w:pPr></w:pPrDefault></w:docDefaults>' +
     '<w:style w:type="paragraph" w:default="1" w:styleId="Normal"><w:name w:val="Normal"/><w:rPr><w:rFonts w:eastAsia="Microsoft YaHei"/></w:rPr></w:style>' +
-    '<w:style w:type="paragraph" w:styleId="Title"><w:name w:val="Title"/><w:pPr><w:spacing w:before="240" w:after="260"/><w:jc w:val="center"/></w:pPr><w:rPr><w:b/><w:color w:val="17394B"/><w:sz w:val="34"/><w:rFonts w:eastAsia="Microsoft YaHei"/></w:rPr></w:style>' +
+    '<w:style w:type="paragraph" w:styleId="Title"><w:name w:val="Title"/><w:pPr><w:spacing w:before="240" w:after="260"/><w:jc w:val="center"/></w:pPr><w:rPr><w:b/><w:color w:val="000000"/><w:sz w:val="34"/><w:rFonts w:eastAsia="Microsoft YaHei"/></w:rPr></w:style>' +
     '<w:style w:type="paragraph" w:styleId="Subtitle"><w:name w:val="Subtitle"/><w:pPr><w:jc w:val="center"/><w:spacing w:after="100"/></w:pPr><w:rPr><w:color w:val="0B806A"/><w:sz w:val="22"/></w:rPr></w:style>' +
     '<w:style w:type="paragraph" w:styleId="Heading1"><w:name w:val="heading 1"/><w:basedOn w:val="Normal"/><w:next w:val="Normal"/><w:pPr><w:keepNext/><w:spacing w:before="360" w:after="180"/><w:ind w:left="0"/></w:pPr><w:rPr><w:b/><w:color w:val="0B806A"/><w:sz w:val="28"/><w:rFonts w:eastAsia="Microsoft YaHei"/></w:rPr></w:style>' +
     '<w:style w:type="paragraph" w:styleId="Heading2"><w:name w:val="heading 2"/><w:basedOn w:val="Normal"/><w:next w:val="Normal"/><w:pPr><w:keepNext/><w:spacing w:before="280" w:after="100"/></w:pPr><w:rPr><w:b/><w:color w:val="17394B"/><w:sz w:val="24"/><w:rFonts w:eastAsia="Microsoft YaHei"/></w:rPr></w:style>' +

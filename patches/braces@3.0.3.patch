@@ -1,0 +1,13 @@
+--- a/lib/parse.js
++++ b/lib/parse.js
+@@ -74,6 +74,10 @@
+   push({ type: 'bos' });
+ 
+   while (index < length) {
++    // Bound the AST before downstream recursive compile/stringify traversal.
++    if (stack.length > 128) {
++      throw new SyntaxError('Brace pattern nesting exceeds the 128-level safety limit');
++    }
+     block = stack[stack.length - 1];
+     value = advance();
+ 

@@ -22,5 +22,6 @@ const config=JSON.parse(await readFile(path,'utf8'));
 const namespaces=Array.isArray(config.kv_namespaces)?config.kv_namespaces:[];
 config.kv_namespaces=[...namespaces.filter(item=>item.binding!=='ATLAS_SETTINGS'),{binding:'ATLAS_SETTINGS',id:namespace.id}];
 config.ai={...(typeof config.ai==='object'&&config.ai?config.ai:{}),binding:'AI'};
+config.vars={...(config.vars||{}),ATLAS_RELEASE:/^[a-f0-9]{40}$/.test(process.env.GITHUB_SHA||'')?process.env.GITHUB_SHA:''};
 await writeFile(path,JSON.stringify(config,null,2)+'\n');
 console.log('Provisioned ATLAS_SETTINGS KV binding:',namespace.id);
