@@ -46,7 +46,7 @@ const rows:Row[]=[
 ];
 const baseArticles:Article[]=rows.map((r)=>({id:r[0],domain:r[1],category:r[2],title:r[3],summary:r[4],level:r[5],minutes:4,sections:[{title:'核心概念',text:r[6]},{title:'技术要点',text:r[7]},{title:'现场应用',text:r[8]}],checks:r[9],sourceName:refs[r[10]][0],source:refs[r[10]][1],kind:r[11]||'手册'}));
 export const articles:Article[]=[...baseArticles.map(a=>({...a,minutes:9,category:a.domain==='robot'?(['r02','r03','r05'].includes(a.id)?'硬件 · ':'软件 · ')+a.category:a.category,sections:[...a.sections,{title:'工作原理与系统约束',text:deep[a.id].principle},{title:'工程实现与验证',text:deep[a.id].engineering}]})),...newArticles];
-export type News={title:string;url:string;date:string;source:string;domain:Domain;type:string;summary?:string;historical?:boolean;topics?:string[];collectedAt?:string;stale?:boolean;feed?:string;feedId?:string;region?:'cn';language?:'zh';sourceKind?:string};
+export type News={title:string;url:string;date:string;source:string;domain:Domain;type:string;summary?:string;historical?:boolean;topics?:string[];collectedAt?:string;stale?:boolean;feed?:string;feedId?:string;region?:'cn';language?:'zh';sourceKind?:string;scope?:'world';catalogGroup?:string};
 export const curated:News[]=[
 {title:'NVIDIA FY2027 Q2：数据中心业务继续扩张',url:'https://nvidianews.nvidia.com/news/nvidia-announces-financial-results-for-second-quarter-fiscal-2027',date:'2026-08-26',source:'NVIDIA 官方财报',domain:'aidc',type:'企业财报',summary:'季度营收 962.21 亿美元；数据中心营收约 890 亿美元。注意财年与自然年口径。',historical:true},
 {title:'用 Isaac GR00T 构建端到端人形机器人策略',url:'https://developer.nvidia.com/blog/develop-humanoid-robot-policies-end-to-end-with-nvidia-isaac-gr00t/',date:'2026-07-07',source:'NVIDIA Developer',domain:'robot',type:'技术研究',summary:'官方开发工作流覆盖数据采集、仿真训练、验证与真实部署。',historical:true},
@@ -64,9 +64,9 @@ export const companies=[
 {name:'优必选',code:'9880.HK',domain:'robot',area:'人形机器人 · 工业应用',tech:'关注工业人形机器人交付、现场成功率和项目验收周期。',period:'官方财报与公告入口',revenue:'未在本站核录',margin:'—',note:'收入、合同金额、意向订单应分开；结合应收账款、研发投入和经营现金流阅读。',url:'https://www.ubtrobot.com/en/financial',ir:'https://www.ubtrobot.com/en/announce',color:'#e16e31'},
 {name:'Serve Robotics',code:'SERV',domain:'robot',area:'配送机器人 · 运营服务',tech:'关注机器人配送的订单密度、运营区域、人工接管和单次配送成本。',period:'2026 Q1 · 截至 2026-03-31',revenue:'300 万美元',margin:'未核录',note:'官方披露流动性 1.974 亿美元。流动性储备不是利润，季度营收也不代表已实现盈利。',url:curated[4].url,ir:'https://investors.serverobotics.com/',color:'#987a12'}
 ];
-export const newsTypes=['全部','技术研究','研究论文','市场洞察','企业财报','产品发布'];
+export const newsTypes=['全部','技术研究','研究论文','市场洞察','企业财报','产品发布','政策法规'];
 const newsFeed=(query:string,english=false)=>'https://news.google.com/rss/search?q='+encodeURIComponent(query+' when:30d')+(english?'&hl=en-US&gl=US&ceid=US:en':'&hl=zh-CN&gl=CN&ceid=CN:zh-Hans');
-export type FeedSource={name:string;url:string;domain:Domain|'both';type:string;description:string;language?:'zh';kind?:'官方直连'|'媒体直连'|'新闻聚合';catalogGroup?:string};
+export type FeedSource={name:string;url:string;domain:Domain|'both';type:string;description:string;language?:'zh';kind?:'官方直连'|'媒体直连'|'新闻聚合';catalogGroup?:string;scope?:'world'};
 export const sources:FeedSource[]=[
 {name:'TechCrunch · AI',url:'https://techcrunch.com/category/artificial-intelligence/feed/',domain:'ml',type:'市场洞察',description:'AI 公司、融资与商业应用报道；媒体观点和企业财报分开核查。'},
 {name:'DCD · 数据中心产业',url:'https://www.datacenterdynamics.com/en/rss/',domain:'aidc',type:'市场洞察',description:'数据中心专业媒体的独立订阅源；投资、工程和供应链报道须结合原始资料核查。'},
@@ -141,3 +141,17 @@ const institutionGroups:Record<string,string[]>={
  '财经媒体':['seekingalpha.com','investing.com','tradingkey.com']
 };
 for(const [group,hosts] of Object.entries(institutionGroups))sources.push({name:'研报索引 · '+group,url:newsFeed('('+hosts.map(h=>'site:'+h).join(' OR ')+') ("artificial intelligence" OR "data center" OR robot OR semiconductor OR 大模型 OR 算力 OR 具身)',['全球资产配置','私募与产业资本','技术与标准','机器人开放研究','投行与咨询','前沿 AI 研究','开放模型与工具','评测与学术'].includes(group)),domain:'both',type:['技术与标准','机器人开放研究','前沿 AI 研究','中国 AI 研究','开放模型与工具','评测与学术'].includes(group)?'技术研究':'市场洞察',kind:'新闻聚合',catalogGroup:group,description:'按机构域名检索公开标题和链接；不是机构 API，也不含付费全文。无命中不代表机构没有更新。'});
+
+// Broad current affairs are isolated from the three professional research domains.
+sources.push(
+ {name:'世界研报 · 全球资产配置',url:newsFeed('(site:blackrock.com OR site:capitalgroup.com OR site:pimco.com OR site:vanguard.com) (economy OR outlook OR inflation OR energy OR market)',true),domain:'both',scope:'world',type:'市场洞察',kind:'新闻聚合',catalogGroup:'全球资产配置',description:'全球机构的宏观与市场研究索引，保留机构观点和原始发布日期。'},
+ {name:'世界研报 · 披露与政策',url:newsFeed('(site:imf.org OR site:worldbank.org OR site:oecd.org OR site:pbc.gov.cn OR site:federalreserve.gov) (economy OR policy OR energy OR growth OR 经济 OR 政策)',true),domain:'both',scope:'world',type:'政策法规',kind:'新闻聚合',catalogGroup:'披露与政策',description:'国际组织与央行宏观政策研究索引；报告预测不等于已发生数据。'},
+ {name:'BBC · World',url:'https://feeds.bbci.co.uk/news/world/rss.xml',domain:'both',scope:'world',type:'国际时事',kind:'媒体直连',description:'国际时事原始订阅；保持原文时间与报道来源。'},
+ {name:'BBC · Business',url:'https://feeds.bbci.co.uk/news/business/rss.xml',domain:'both',scope:'world',type:'市场洞察',kind:'媒体直连',description:'全球经济、企业、贸易与金融新闻。'},
+ {name:'BBC · Science',url:'https://feeds.bbci.co.uk/news/science_and_environment/rss.xml',domain:'both',scope:'world',type:'科技与科学',kind:'媒体直连',description:'科学、环境与能源新闻；不同于 AI 专业技术流。'},
+ {name:'联合国新闻 · 中文',url:'https://news.un.org/feed/subscribe/zh/news/all/rss.xml',domain:'both',scope:'world',type:'社会与公共政策',language:'zh',kind:'官方直连',description:'联合国中文原站订阅，覆盖国际、人道、气候与公共政策。'},
+ {name:'UN News · Global',url:'https://news.un.org/feed/subscribe/en/news/all/rss.xml',domain:'both',scope:'world',type:'社会与公共政策',kind:'官方直连',description:'联合国新闻，包含人道、气候与国际政策。'},
+ {name:'Federal Reserve · Policy',url:'https://www.federalreserve.gov/feeds/press_monetary.xml',domain:'both',scope:'world',type:'政策法规',kind:'官方直连',description:'美联储货币政策公告；保留公告日期，不是实时市场行情。'},
+ {name:'世界热点 · 中文索引',url:newsFeed('(国际 OR 全球) (经济 OR 科技 OR 能源 OR 外交 OR 气候 OR 政策)'),domain:'both',scope:'world',type:'国际时事',language:'zh',kind:'新闻聚合',description:'中文国际热点公开新闻索引，需打开原文交叉核查。'},
+ {name:'中国经济 · 政策索引',url:newsFeed('(site:gov.cn OR site:news.cn OR site:people.com.cn) (经济 OR 科技 OR 能源 OR 政策)'),domain:'both',scope:'world',type:'政策法规',language:'zh',kind:'新闻聚合',description:'中国政府、新华社与人民日报公开索引；不保证搜索覆盖完整。'}
+);

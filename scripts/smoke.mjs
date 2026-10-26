@@ -11,12 +11,12 @@ for(let attempt=1;attempt<=6;attempt++){
  if(attempt===6)throw Error('health endpoint invalid: status='+health.status+', content-type='+contentType+', location='+String(health.headers.get('location')));
  await new Promise(r=>setTimeout(r,1500));
 }
-must(info?.ok&&info?.authConfigured&&info?.version==='4.1.0'&&info?.settingsStorage,'health, auth or KV settings configuration failed');
+must(info?.ok&&info?.authConfigured&&info?.version==='4.2.0'&&info?.settingsStorage,'health, auth or KV settings configuration failed');
 for(const path of ['/','/settings','/case-study','/read/a04','/aidc.jpg']){
  const r=await request(path);
  must(r.status===302&&r.headers.get('location')?.startsWith('/auth/login'),'anonymous path is not protected: '+path);
 }
-for(const path of ['/api/updates?source=0','/api/indicators','/api/admin/settings']){
+for(const path of ['/api/updates?source=0','/api/indicators','/api/admin/settings','/api/translate']){
  must((await request(path)).status===401,'anonymous API not protected: '+path);
 }
 const csrf=await request('/auth/login',{method:'POST',headers:{Origin:'https://invalid.example','Content-Type':'application/x-www-form-urlencoded'},body:'password=invalid'});
@@ -35,7 +35,7 @@ if(process.env.ATLAS_ACCESS_PASSWORD){
   must(loginCookie,'session cookie missing');
   must(loginCookie.includes('Max-Age=604800'),'session cookie is not configured for seven days');
   const cookie=loginCookie.split(';')[0];
-  for(const [path,marker] of [['/','知域'],['/settings','网站设置'],['/case-study','1 MW'],['/read/a04','液冷']]){
+  for(const [path,marker] of [['/','知域'],['/settings','网站设置'],['/case-study','1 MW'],['/read/a04','液冷'],['/?view=world','世界热点']]){
    const r=await request(path,{headers:{Cookie:cookie}});
    must(r.ok,'authenticated route failed: '+path+' status='+r.status+' location='+String(r.headers.get('location')));
    must((await r.text()).includes(marker),'route content missing: '+path);

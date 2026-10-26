@@ -1,4 +1,5 @@
 'use client';
+import {Localized} from '@/components/language';
 import {useEffect,useMemo,useState} from 'react';
 import {ArrowDownWideNarrow,ArrowUpRight,Check,Download,Filter,Sparkles,Star,Trash2} from 'lucide-react';
 import type {Domain,News} from '@/lib/content';
@@ -156,28 +157,28 @@ export function EditorialDesk({domain,domainName,items,scopeLabel,editionType,mi
 
   return <section className="editorial-desk" aria-label="微信公众号精选工作台">
     <div className="editorial-head">
-      <div><span className="eyebrow"><Sparkles size={14}/> EDITORIAL DESK / 精选与成刊</span><h2>公众号精选工作台</h2><p>先筛选，再编排。导出时尝试读取公开原文；AI 概述保留支撑摘录，不以标题推断替代来源事实。日报、周报、月报按当前时间筛选范围成刊。</p></div>
-      <button className="primary-button" onClick={exportDocx} disabled={exporting}><Download size={16}/>{exporting?'正在生成 DOCX…':'生成公众号 DOCX（'+selectedItems.length+' 条）'}</button>
+      <div><span className="eyebrow"><Sparkles size={14}/><Localized value={"EDITORIAL DESK / 精选与成刊"}/> </span><h2><Localized value={"公众号精选工作台"}/> </h2><p><Localized value={"先筛选，再编排。导出时尝试读取公开原文；AI 概述保留支撑摘录，不以标题推断替代来源事实。日报、周报、月报按当前时间筛选范围成刊。"}/> </p></div>
+      <button className="primary-button" onClick={exportDocx} disabled={exporting}><Download size={16}/><Localized value={exporting?'正在生成 DOCX…':'生成公众号 DOCX（'+selectedItems.length+' 条）'}/></button>
     </div>
     <div className="editorial-stats">
-      <div><strong>{ranked.length}</strong><span>去重候选</span></div>
-      <div><strong>{selectedItems.length}<small> / {selectionLimit}</small></strong><span>当前范围已选</span></div>
-      <div><strong>{topSourceCount}</strong><span>一手/官方来源</span></div>
-      <div><strong>{duplicateCount}</strong><span>标题/链接重复抑制</span></div>
+      <div><strong>{ranked.length}</strong><span><Localized value={"去重候选"}/> </span></div>
+      <div><strong>{selectedItems.length}<small> / {selectionLimit}</small></strong><span><Localized value={"当前范围已选"}/> </span></div>
+      <div><strong>{topSourceCount}</strong><span><Localized value={"一手/官方来源"}/> </span></div>
+      <div><strong>{duplicateCount}</strong><span><Localized value={"标题/链接重复抑制"}/> </span></div>
     </div>
-    <div className="editorial-note"><Check size={16}/><span>规则化初筛 · 一手来源优先 · 当前范围：{scopeLabel||'按上方资讯筛选'}</span><span className="editorial-note-tail">分值越高越优先，不代表真实性评级</span></div>
+    <div className="editorial-note"><Check size={16}/><span><Localized value={"规则化初筛 · 一手来源优先 · 当前范围："}/> <Localized value={scopeLabel||'按上方资讯筛选'}/></span><span className="editorial-note-tail"><Localized value={"分值越高越优先，不代表真实性评级"}/> </span></div>
     <div className="editorial-controls">
-      <label className="editorial-search"><span>搜索候选</span><input type="search" value={search} onChange={e=>{setSearch(e.target.value);setVisibleLimit(10);}} placeholder="标题、来源、内容关键词"/></label>
-      <label><span>来源层级</span><select value={source} onChange={e=>setSource(e.target.value)}>{['全部来源','官方/一手','专业媒体','新闻聚合','其他来源'].map(x=><option key={x}>{x}</option>)}</select></label>
-      <label><span>内容类型</span><select value={type} onChange={e=>setType(e.target.value)}>{types.map(x=><option key={x}>{x}</option>)}</select></label>
-      <label className="editorial-score-filter"><span>最低优先级分数：<b>{minScore}</b></span><input type="range" min="0" max="80" step="5" value={minScore} onChange={e=>{setMinScore(Number(e.target.value));setVisibleLimit(10);}}/></label>
-      <label><span>排序</span><select value={sort} onChange={e=>setSort(e.target.value as 'score'|'date')}><option value="score">精选优先</option><option value="date">最新发布</option></select></label>
-      <label className="editorial-check"><input type="checkbox" checked={avoidExported} onChange={e=>setAvoidExported(e.target.checked)}/>自动精选避开近期已导出</label>
-      <label className="editorial-check"><input type="checkbox" checked={onlySelected} onChange={e=>setOnlySelected(e.target.checked)}/>只看已选</label>
+      <label className="editorial-search"><span><Localized value={"搜索候选"}/> </span><input type="search" value={search} onChange={e=>{setSearch(e.target.value);setVisibleLimit(10);}} placeholder="标题、来源、内容关键词"/></label>
+      <label><span><Localized value={"来源层级"}/> </span><select value={source} onChange={e=>setSource(e.target.value)}>{['全部来源','官方/一手','专业媒体','新闻聚合','其他来源'].map(x=><option key={x}>{x}</option>)}</select></label>
+      <label><span><Localized value={"内容类型"}/> </span><select value={type} onChange={e=>setType(e.target.value)}>{types.map(x=><option key={x}>{x}</option>)}</select></label>
+      <label className="editorial-score-filter"><span><Localized value={"最低优先级分数："}/> <b>{minScore}</b></span><input type="range" min="0" max="80" step="5" value={minScore} onChange={e=>{setMinScore(Number(e.target.value));setVisibleLimit(10);}}/></label>
+      <label><span><Localized value={"排序"}/> </span><select value={sort} onChange={e=>setSort(e.target.value as 'score'|'date')}><option value="score">精选优先</option><option value="date">最新发布</option></select></label>
+      <label className="editorial-check"><input type="checkbox" checked={avoidExported} onChange={e=>setAvoidExported(e.target.checked)}/><Localized value={"自动精选避开近期已导出"}/> </label>
+      <label className="editorial-check"><input type="checkbox" checked={onlySelected} onChange={e=>setOnlySelected(e.target.checked)}/><Localized value={"只看已选"}/> </label>
     </div>
     <div className="editorial-actions">
-      <span><Filter size={15}/> 当前显示 {filtered.length} 条候选</span>
-      <div><button onClick={autoSelect}><Sparkles size={15}/>自动精选 {editionSize} 条</button><button onClick={addVisible}><Check size={15}/>选择当前前 {Math.min(visibleLimit,filtered.length)} 条</button><button onClick={()=>{setSelected([]);setNotice('已清空本领域精选列表。');}}><Trash2 size={15}/>清空</button><button onClick={()=>setSort(sort==='score'?'date':'score')}><ArrowDownWideNarrow size={15}/>{sort==='score'?'改按时间':'改按优先级'}</button></div>
+      <span><Filter size={15}/><Localized value={"当前显示"}/> {filtered.length}<Localized value={"条候选"}/> </span>
+      <div><button onClick={autoSelect}><Sparkles size={15}/><Localized value={"自动精选"}/> {editionSize}<Localized value={"条"}/> </button><button onClick={addVisible}><Check size={15}/><Localized value={"选择当前前"}/> {Math.min(visibleLimit,filtered.length)}<Localized value={"条"}/> </button><button onClick={()=>{setSelected([]);setNotice('已清空本领域精选列表。');}}><Trash2 size={15}/><Localized value={"清空"}/> </button><button onClick={()=>setSort(sort==='score'?'date':'score')}><ArrowDownWideNarrow size={15}/><Localized value={sort==='score'?'改按时间':'改按优先级'}/></button></div>
     </div>
     <div className="editorial-items">
       {filtered.slice(0,visibleLimit).map(n=>{
@@ -187,20 +188,20 @@ export function EditorialDesk({domain,domainName,items,scopeLabel,editionType,mi
         return <article className={'editorial-item '+(picked?'picked':'')} key={n.domain+':'+n.url}>
           <label className="editorial-pick" aria-label={(picked?'取消精选 ':'加入精选 ')+n.title}><input type="checkbox" checked={picked} onChange={()=>toggle(n.url)}/><span>{picked?<Check size={14}/>:<Star size={14}/>}</span></label>
           <div className="editorial-item-main">
-            <div className="editorial-item-meta"><span className="tag">{n.type}</span><span>{sourceClass(n)}</span><time>{shortDate(n.date)}</time>{(n.stale||n.historical)&&<em>历史/缓存</em>}</div>
-            <h3>{n.title}<a href={n.url} target="_blank" rel="noreferrer" aria-label="打开原文"><ArrowUpRight size={15}/></a></h3>
-            {n.summary&&<p>{n.summary}</p>}
+            <div className="editorial-item-meta"><span className="tag">{n.type}</span><span>{sourceClass(n)}</span><time>{shortDate(n.date)}</time>{(n.stale||n.historical)&&<em><Localized value={"历史/缓存"}/> </em>}</div>
+            <h3><Localized value={n.title}/><a href={n.url} target="_blank" rel="noreferrer" aria-label="打开原文"><ArrowUpRight size={15}/></a></h3>
+            {n.summary&&<p><Localized value={n.summary}/></p>}
             <div className="editorial-reasons">{reasons.map(reason=><span key={reason}>{reason}</span>)}</div>
-            <small>{n.source}{n.feed&&n.feed!==n.source?' · 订阅：'+n.feed:''}</small>
+            <small>{n.source}<Localized value={n.feed&&n.feed!==n.source?' · 订阅：'+n.feed:''}/></small>
           </div>
-          <div className="editorial-score" title="基于公开字段的规则排序，不代表事实验证"><strong>{score}</strong><span>优先级</span><i><b style={{width:score+'%'}}/></i></div>
+          <div className="editorial-score" title="基于公开字段的规则排序，不代表事实验证"><strong>{score}</strong><span><Localized value={"优先级"}/> </span><i><b style={{width:score+'%'}}/></i></div>
         </article>;
       })}
-      {!filtered.length&&<div className="editorial-empty">没有匹配候选。可降低分数阈值、调整来源/类型，或扩大资讯时间范围。</div>}
-      {filtered.length>visibleLimit&&<button className="editorial-more" onClick={()=>setVisibleLimit(n=>n+10)}>显示更多候选（{visibleLimit} / {filtered.length}）</button>}
+      {!filtered.length&&<div className="editorial-empty"><Localized value={"没有匹配候选。可降低分数阈值、调整来源/类型，或扩大资讯时间范围。"}/> </div>}
+      {filtered.length>visibleLimit&&<button className="editorial-more" onClick={()=>setVisibleLimit(n=>n+10)}><Localized value={"显示更多候选（"}/> {visibleLimit} / {filtered.length}）</button>}
     </div>
-    <details className="editorial-copy-settings"><summary>编辑微信公众号标题与导语</summary><div className="editorial-copy-fields"><label><span>公众号文章标题</span><input value={title||defaultTitle} onChange={e=>setTitle(e.target.value)} maxLength={100} placeholder="输入文章标题"/></label><label><span>导语 / 编者按（留空自动生成）</span><textarea value={lead} onChange={e=>setLead(e.target.value)} rows={3} placeholder="可编辑导语；留空时根据已选条目自动生成，不会补写未经来源支持的事实。"/></label></div></details>
+    <details className="editorial-copy-settings"><summary><Localized value={"编辑微信公众号标题与导语"}/> </summary><div className="editorial-copy-fields"><label><span><Localized value={"公众号文章标题"}/> </span><input value={title||defaultTitle} onChange={e=>setTitle(e.target.value)} maxLength={100} placeholder="输入文章标题"/></label><label><span><Localized value={"导语 / 编者按（留空自动生成）"}/> </span><textarea value={lead} onChange={e=>setLead(e.target.value)} rows={3} placeholder="可编辑导语；留空时根据已选条目自动生成，不会补写未经来源支持的事实。"/></label></div></details>
     {notice&&<p className="editorial-message" role="status">{notice}</p>}
-    <p className="editorial-footnote">导出文件采用标准 Office Open XML DOCX，可编辑标题、段落及来源链接。一件事一条，附关联报道与支撑摘录；建议确认原文、版权和事实后再发布到公众号。</p>
+    <p className="editorial-footnote"><Localized value={"导出文件采用标准 Office Open XML DOCX，可编辑标题、段落及来源链接。一件事一条，附关联报道与支撑摘录；建议确认原文、版权和事实后再发布到公众号。"}/> </p>
   </section>;
 }

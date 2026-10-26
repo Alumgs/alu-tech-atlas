@@ -35,7 +35,8 @@ export function parseFeed(raw:string,source:FeedSource,checkedAt:string,fallback
   const robot=/robot|humanoid|isaac|gr00t|embodied|manipulat|机器人|具身/i.test(context)||world;
   const aidc=/financial|earnings|quarter.*results|data cent|datacent|AI factor|Blackwell|Rubin|network|GPU|cooling|液冷|智算|服务器|数据中心|算力|昇腾|光模块|超节点|semiconductor|chip|infrastructure/i.test(context);
   const ml=/language model|LLM|agent|inference|fine.tun|quantiz|distill|machine learn|大模型|智能体|小模型|模型|人工智能|深度学习|推理|开源|通义|千问|DeepSeek|artificial intelligence|\bAI\b/i.test(context);
-  const domains:Domain[]=source.domain==='both'?([...aidc?['aidc' as Domain]:[],...robot?['robot' as Domain]:[],...ml?['ml' as Domain]:[]]):[source.domain as Domain];
+  // General news has its own stream and must not be routed through AI keyword gates.
+  const domains:Domain[]=source.scope==='world'?['aidc']:source.domain==='both'?([...aidc?['aidc' as Domain]:[],...robot?['robot' as Domain]:[],...ml?['ml' as Domain]:[]]):[source.domain as Domain];
   const type=/financial|earnings|quarter.*results|财报|营收|业绩/i.test(title)?'企业财报':source.type==='研究论文'?'研究论文':/发布|推出|launch|introduc|release/i.test(title)&&source.type!=='市场洞察'?'产品发布':source.type;
   if(!domains.length)continue;
   const sourceTag=tag(b,'source');
@@ -43,7 +44,7 @@ export function parseFeed(raw:string,source:FeedSource,checkedAt:string,fallback
   for(const domain of domains)results.push({
    title,url:canonicalUrl(url),date:/^\d{4}-\d{2}-\d{2}$/.test(rawDate)?rawDate:new Date(time).toISOString(),source:sourceTag||source.name,feedId:source.name,feed:fallback?'Google News · 兜底索引':source.name,
    language:source.language,sourceKind,region:/中国|国内|工信部|信通院|华为|昇腾|浪潮|中科曙光|新华三|寒武纪|中际旭创|英维克|润泽科技|数据港|宇树|优必选|智元|傅立叶|埃斯顿|汇川|绿的谐波|三花智控|智源|上海人工智能实验室|北京人形|阿里|通义|千问|百度|文心|腾讯|字节|豆包|智谱|月之暗面|科大讯飞|商汤|深度求索|DeepSeek|Qwen|Unitree|UBTECH|MiniMax|Kimi/i.test(context)?'cn':undefined,
-   domain,type,summary:description||undefined,collectedAt:checkedAt,topics:world?['world']:[]
+   domain,type,summary:description||undefined,collectedAt:checkedAt,topics:world?['world']:[],scope:source.scope,catalogGroup:source.catalogGroup
   });
  }
  return results.sort((a,b)=>Date.parse(b.date)-Date.parse(a.date)).slice(0,120);

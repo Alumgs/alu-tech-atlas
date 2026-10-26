@@ -4,8 +4,8 @@ import {canonicalUrl, publicUrl} from './url-safety.ts';
 export type SourceTier = 'primary' | 'media' | 'aggregate' | 'other';
 export const tierLabels: Record<SourceTier, string> = {primary:'一手资料',media:'专业媒体',aggregate:'聚合索引',other:'其他来源'};
 // A publisher label alone must not promote an unknown website to an official source.
-const primaryRoots=['nvidia.com','arxiv.org','iea.org','abb.com','serverobotics.com','huawei.com','openai.com','anthropic.com','deepmind.google','research.google','ai.meta.com','huggingface.co','baai.ac.cn','gov.cn','bytedance.com','unitree.com','ubtrobot.com','qwen.ai'];
-const mediaRoots=['techcrunch.com','datacenterdynamics.com','therobotreport.com','venturebeat.com','infoq.cn','qbitai.com','ieee.org','acm.org','nature.com','science.org'];
+const primaryRoots=['nvidia.com','arxiv.org','iea.org','abb.com','serverobotics.com','huawei.com','openai.com','anthropic.com','deepmind.google','research.google','ai.meta.com','huggingface.co','baai.ac.cn','gov.cn','bytedance.com','unitree.com','ubtrobot.com','qwen.ai','un.org','federalreserve.gov','imf.org','worldbank.org'];
+const mediaRoots=['techcrunch.com','datacenterdynamics.com','therobotreport.com','venturebeat.com','infoq.cn','qbitai.com','ieee.org','acm.org','nature.com','science.org','bbc.co.uk','bbc.com'];
 const matches=(host:string,root:string)=>host===root||host.endsWith('.'+root);
 export function sourceTier(n:News):SourceTier{
  const host=publicUrl(n.url)?.hostname||'';
@@ -40,7 +40,7 @@ function normalizeTitle(n:News):string{
 }
 function grams(value:string){const chars=Array.from(value),out=new Set<string>();for(let i=0;i<chars.length-1;i++)out.add(chars[i]+chars[i+1]);return out;}
 function sameEvent(a:News,b:News):boolean{
- if(a.domain!==b.domain||Math.abs(Date.parse(a.date)-Date.parse(b.date))>14*86400000)return false;
+ if(a.domain!==b.domain||a.scope!==b.scope||Math.abs(Date.parse(a.date)-Date.parse(b.date))>14*86400000)return false;
  const left=normalizeTitle(a),right=normalizeTitle(b);
  if(!left||!right)return false;
  if(left===right)return true;
@@ -71,7 +71,7 @@ export function clusterStories(items:News[],now=Date.now()):NewsEvent[]{
  .sort((a,b)=>Number(Boolean(a.stale))-Number(Boolean(b.stale))||scoreNews(b,now)-scoreNews(a,now)||Date.parse(b.date)-Date.parse(a.date));
  const events:NewsEvent[]=[],urls=new Map<string,NewsEvent>(),titles=new Map<string,NewsEvent>(),recent=new Map<string,NewsEvent[]>();
  for(const item of sorted.slice(0,5000)){
-  const canonical=item.domain+'|'+canonicalUrl(item.url),titleKey=item.domain+'|'+normalizeTitle(item),byTitle=titles.get(titleKey);
+  const canonical=(item.scope||item.domain)+'|'+canonicalUrl(item.url),titleKey=(item.scope||item.domain)+'|'+normalizeTitle(item),byTitle=titles.get(titleKey);
   const event=urls.get(canonical)||(byTitle&&sameEvent(byTitle.primary,item)?byTitle:undefined)||(recent.get(item.domain)||[]).find(e=>sameEvent(e.primary,item));
   if(event){
    event.primary=representative(event.primary,item);event.score=scoreNews(event.primary,now);

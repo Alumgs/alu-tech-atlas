@@ -1,4 +1,5 @@
 import handler from 'vinext/server/fetch-handler';
+import {translateText} from './translate';
 import {configured,verifyPassword,hashPassword,issueSession,validSession,getCookie,sessionCookie,sameOrigin,safeReturn,type AuthEnv} from './auth';
 import {loginPage} from './login';
 import {defaultSiteSettings,sanitizeSiteSettings} from '../lib/site-settings';
@@ -100,7 +101,7 @@ export default {
   if(!['GET','HEAD'].includes(request.method)&&!sameOrigin(request))return protect(json({error:'请求来源不符。'},403));
   if(path==='/api/health'&&!['GET','HEAD'].includes(request.method))return protect(json({error:'仅支持 GET 或 HEAD。'},405,{Allow:'GET, HEAD'}));
   const authEnv=await effectiveAuthEnv(env);
-  if(path==='/api/health')return protect(Response.json({ok:true,service:'alu-tech-atlas',version:'4.1.0',release:env.ATLAS_RELEASE||'',platform:'cloudflare-workers',authConfigured:configured(authEnv),settingsStorage:Boolean(env.ATLAS_SETTINGS),sessionDays:7}));
+  if(path==='/api/health')return protect(Response.json({ok:true,service:'alu-tech-atlas',version:'4.2.0',release:env.ATLAS_RELEASE||'',platform:'cloudflare-workers',authConfigured:configured(authEnv),settingsStorage:Boolean(env.ATLAS_SETTINGS),sessionDays:7}));
   if(!configured(authEnv))return protect(new Response('网站正在完成访问配置，请稍后再试。',{status:503,headers:{'Content-Type':'text/plain; charset=utf-8'}}));
   if(path==='/auth/login'){
    if(request.method==='GET')result=html('',safeReturn(url.searchParams.get('returnTo')));
@@ -124,6 +125,14 @@ export default {
    if(path.startsWith('/api/admin/')){
     const limited=await env.FEED_LIMITER.limit({key:'atlas-admin:'+getCookie(request).slice(0,48)});
     result=limited.success?await adminApi(request,env,authEnv):json({error:'请求频率过高，请稍后重试。'},429,{'Retry-After':'60'});
+   }else if(path==='/api/translate'){
+    if(request.method!=='POST')result=json({error:'Only POST supported'},405,{Allow:'POST'});
+    else if(!await env.FEED_LIMITER.limit({key:'atlas-translation:'+getCookie(request).slice(0,48)}).then(r=>r.success))result=json({error:'Too many requests'},429);
+    else {
+     let enabled=true;
+     try{const raw=await env.ATLAS_SETTINGS?.get('public-settings');if(raw)enabled=sanitizeSiteSettings(JSON.parse(raw)).enableAIEnrichment;}catch{enabled=false;}
+     result=enabled?await translateText(request,env):json({error:'AI translation is disabled in settings'},503);
+    }
    }else if(path==='/api/editorial/enrich'){
     if(request.method!=='POST')result=json({error:'仅支持 POST。'},405,{Allow:'POST'});
     else if(!sameOrigin(request))result=json({error:'请求来源不符。'},403);

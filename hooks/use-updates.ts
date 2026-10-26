@@ -4,11 +4,11 @@ import {sources,type News,type Domain} from '@/lib/content';
 import {canonicalUrl,publicUrl} from '@/lib/url-safety';
 export type FeedStatus={name:string;ok:boolean;count:number;error?:string;warning?:string;fallback?:boolean;checkedAt:string;latestPublishedAt?:string;durationMs?:number};
 export type UpdateResult={items:News[];statuses:FeedStatus[];checkedAt:string;cached?:boolean};
-const KEY='atlas-updates-v5';
+const KEY='atlas-updates-v6';
 const day=(value=Date.now())=>new Date(value).toLocaleDateString('en-CA',{timeZone:'Asia/Shanghai'});
 export function mergeItems(items:News[]){
  const unique=new Map<string,News>();
- for(const n of items){if(!n||typeof n.title!=='string'||typeof n.source!=='string'||typeof n.type!=='string'||typeof n.date!=='string'||!['aidc','robot','ml'].includes(n.domain)||!publicUrl(n.url)||!Number.isFinite(Date.parse(n.date)))continue;const key=n.domain+'|'+canonicalUrl(n.url),old=unique.get(key);if(!old||old.stale&&!n.stale)unique.set(key,n);}
+ for(const n of items){if(!n||typeof n.title!=='string'||typeof n.source!=='string'||typeof n.type!=='string'||typeof n.date!=='string'||!['aidc','robot','ml'].includes(n.domain)||!publicUrl(n.url)||!Number.isFinite(Date.parse(n.date)))continue;const key=(n.scope||n.domain)+'|'+canonicalUrl(n.url),old=unique.get(key);if(!old||old.stale&&!n.stale)unique.set(key,n);}
  return [...unique.values()].sort((a,b)=>Date.parse(b.date)-Date.parse(a.date)).slice(0,5000);
 }
 export function useUpdates(domain:Domain){
@@ -17,12 +17,12 @@ export function useUpdates(domain:Domain){
  domainRef.current=domain;
  const refresh=useCallback(async(force=false)=>{
   if(active.current)return;active.current=true;abort.current=new AbortController();const signal=abort.current.signal;lastAttempt.current=Date.now();setLoading(true);setProgress(0);setAdded(0);setError('');
-  const previous=current.current;const oldKeys=new Set(previous?.items.map(n=>n.domain+n.url)||[]);
+  const previous=current.current;const oldKeys=new Set(previous?.items.map(n=>(n.scope||n.domain)+n.url)||[]);
   // Keep per-feed copies until final deduplication so a failed duplicate cannot hide a fresh item.
   const perFeed=new Map<string,News[]>();for(const n of previous?.items||[]){const key=n.feedId||n.feed||'';perFeed.set(key,[...(perFeed.get(key)||[]),{...n,stale:true}]);}
-  const statuses:FeedStatus[]=[];const order=sources.map((s,index)=>({s,index})).sort((a,b)=>Number(b.s.domain===domainRef.current)-Number(a.s.domain===domainRef.current));
+  const statuses:FeedStatus[]=[];const order=sources.map((s,index)=>({s,index})).sort((a,b)=>Number(b.s.domain===domainRef.current||b.s.scope==='world')-Number(a.s.domain===domainRef.current||a.s.scope==='world'));
   let cursor=0,complete=0,lastPaint=0;
-  const publish=()=>{const items=mergeItems([...perFeed.values()].flat());const result={items,statuses:[...statuses],checkedAt:new Date().toISOString()};current.current=result;startTransition(()=>{setData(result);setProgress(complete);setAdded(items.filter(n=>!n.stale&&!oldKeys.has(n.domain+n.url)).length);setIsOld(!statuses.some(s=>s.ok));});};
+  const publish=()=>{const items=mergeItems([...perFeed.values()].flat());const result={items,statuses:[...statuses],checkedAt:new Date().toISOString()};current.current=result;startTransition(()=>{setData(result);setProgress(complete);setAdded(items.filter(n=>!n.stale&&!oldKeys.has((n.scope||n.domain)+n.url)).length);setIsOld(!statuses.some(s=>s.ok));});};
   const worker=async()=>{while(cursor<order.length&&!signal.aborted){const {s,index}=order[cursor++];try{
    const response=await fetch('/api/updates?source='+index+(force?'&force=1':''),{cache:'no-store',signal:AbortSignal.any([signal,AbortSignal.timeout(18000)])});if(response.status===401){abort.current?.abort();window.location.assign('/auth/login?returnTo='+encodeURIComponent(location.pathname+location.search));return;}if(!response.ok)throw Error('HTTP '+response.status);
    const result:UpdateResult=await response.json();if(!Array.isArray(result.items)||!result.statuses?.[0])throw Error('无效响应');statuses.push(result.statuses[0]);if(result.statuses[0].ok)perFeed.set(s.name,result.items);
@@ -33,7 +33,7 @@ export function useUpdates(domain:Domain){
   finally{if(abort.current?.signal===signal){active.current=false;if(!signal.aborted)setLoading(false);}}
  },[]);
  useEffect(()=>{
-  let saved:UpdateResult|null=null;try{saved=JSON.parse(localStorage.getItem(KEY)||'null');}catch{}
+  let saved:UpdateResult|null=null;try{saved=JSON.parse(localStorage.getItem(KEY)||localStorage.getItem('atlas-updates-v5')||'null');}catch{}
   if(saved&&Array.isArray(saved.items)&&Array.isArray(saved.statuses)){saved.items=mergeItems(saved.items);current.current=saved;setData(saved);setIsOld(true);const recent=Date.now()-Date.parse(saved.checkedAt)<15*60000&&day(Date.parse(saved.checkedAt))===day();if(recent&&saved.statuses.length===sources.length&&saved.statuses.some(s=>s.ok)){setIsOld(false);setProgress(sources.length);lastAttempt.current=Date.parse(saved.checkedAt);}else void refresh();}else void refresh();
   const check=()=>{if(document.visibilityState==='visible'&&(Date.now()-lastAttempt.current>15*60000||day(lastAttempt.current)!==day()))void refresh();};
   const timer=setInterval(check,60000);document.addEventListener('visibilitychange',check);

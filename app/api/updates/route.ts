@@ -94,7 +94,7 @@ async function collect(selected:FeedSource[]=sources):Promise<Payload>{
   }
  });
  const seen=new Set<string>();
- const items=results.flatMap(r=>r.items).filter(n=>{const key=n.domain+'|'+canonicalUrl(n.url);if(seen.has(key))return false;seen.add(key);return true;}).sort((a,b)=>Date.parse(b.date)-Date.parse(a.date));
+ const items=results.flatMap(r=>r.items).filter(n=>{const key=(n.scope||n.domain)+'|'+canonicalUrl(n.url);if(seen.has(key))return false;seen.add(key);return true;}).sort((a,b)=>Date.parse(b.date)-Date.parse(a.date));
  return {items,statuses:results.map(r=>r.status),checkedAt};
 }
 export async function GET(request:Request){
@@ -115,6 +115,6 @@ export async function GET(request:Request){
  const snapshots=[...feedMemory.values()].map(x=>x.data);
  if(!snapshots.length)return Response.json({error:'请指定 source 索引获取来源；批量结果仅返回已采集缓存。'},{status:400,headers});
  const unique=new Map<string,News>();
- for(const cached of feedMemory.values())for(const n of cached.data.items)unique.set(n.domain+'|'+canonicalUrl(n.url),{...n,stale:Date.now()-cached.at>900000||n.stale});
+ for(const cached of feedMemory.values())for(const n of cached.data.items)unique.set((n.scope||n.domain)+'|'+canonicalUrl(n.url),{...n,stale:Date.now()-cached.at>900000||n.stale});
  return Response.json({items:[...unique.values()],statuses:snapshots.flatMap(x=>x.statuses),checkedAt:new Date().toISOString(),cached:true},{headers});
 }
