@@ -1,5 +1,6 @@
 'use client';
-import {useMemo,useState} from 'react';
+import {useMemo,useState,lazy,Suspense} from 'react';
+const MarketChart=lazy(()=>import('./market-chart').then(m=>({default:m.MarketChart})));
 import {Flame,Globe2,ArrowUpRight} from 'lucide-react';
 import {clusterStories} from '@/lib/editorial';
 import {sourceGroup,type StreamScope} from '@/lib/intelligence';
@@ -8,7 +9,7 @@ import type {UpdateResult} from '@/hooks/use-updates';
 import {NewsFeed} from './news-feed';
 import {SourceDirectory} from './source-directory';
 import {BilingualText,useLanguage} from './language';
-export function IntelligenceStream({scope,domain,domainName,items,updates,loading}:{scope:StreamScope;domain:Domain;domainName:string;items:News[];updates:UpdateResult|null;loading:boolean}){
+export function IntelligenceStream({scope,domain,domainName,items,updates,loading,showMarketChart=false}:{scope:StreamScope;domain:Domain;domainName:string;items:News[];updates:UpdateResult|null;loading:boolean;showMarketChart?:boolean}){
  const {t}=useLanguage(),[type,setType]=useState('全部'),[group,setGroup]=useState('全部');
  const groups=[...new Set(items.map(sourceGroup).filter(Boolean))];
  const filtered=useMemo(()=>items.filter(n=>(type==='全部'||n.type===type)&&(group==='全部'||sourceGroup(n)===group)),[items,type,group]);
@@ -24,6 +25,7 @@ export function IntelligenceStream({scope,domain,domainName,items,updates,loadin
  <div className="filter-row" aria-label={t('资讯类型','Content type')}>{types.map(x=><button key={x} className={type===x?'selected':''} onClick={()=>setType(x)}>{t(x)}</button>)}</div>
  <details className="index-group-filter"><summary>{t('按研报机构来源筛选','Filter institutional indexes')} · {group==='全部'?t('全部'):t(group)}</summary><div className="filter-row">{['全部',...groups].map(g=><button key={g} className={group===g?'selected':''} onClick={()=>setGroup(g)}>{t(g)}</button>)}</div><p>{t('仅列出当前时间窗已有报道的机构组；完整入口见下方来源库。','Only groups with collected stories in the current time window are listed. The full directory is below.')}</p></details>
  <NewsFeed key={scope+'|'+group} items={filtered} domain={domain} domainName={scope==='world'?t('世界热点'):domainName} loading={loading} scope={scope} newsType={type} pageSize={12}/>
+ {type==='市场洞察'&&scope!=='world'&&showMarketChart&&<Suspense fallback={<p>Loading…</p>}><MarketChart domain={domain}/></Suspense>}
  <SourceDirectory scope={scope} updates={updates} onGroup={chooseGroup}/>
  </div>;
 }
