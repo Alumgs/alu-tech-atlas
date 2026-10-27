@@ -1,4 +1,4 @@
-import {relevantDomains,worldTopic} from './relevance.ts';
+import {relevantDomains,worldTopic,contentType} from './relevance.ts';
 import type {News,Domain,FeedSource} from './content';
 import {publicUrl,canonicalUrl} from './url-safety.ts';
 function decode(s:string){
@@ -34,14 +34,15 @@ export function parseFeed(raw:string,source:FeedSource,checkedAt:string,fallback
   const context=(title+' '+description).slice(0,1800);
   const world=/world.model|世界模型|cosmos|v-jepa|genie|dreamerv?3/i.test(context);
   const domains:Domain[]=source.scope==='world'?['aidc']:relevantDomains({title,summary:description});
-  const type=/financial|earnings|quarter.*results|财报|营收|业绩/i.test(title)?'企业财报':source.type==='研究论文'?'研究论文':/发布|推出|launch|introduc|release/i.test(title)&&source.type!=='市场洞察'?'产品发布':source.type;
+  const baseType=source.type==='政策法规'&&/gov\.cn/.test(source.url)&&!/\/zhengce\//.test(url)?'国际时事':source.type;
+  const type=/financial|earnings|quarter.*results|财报|营收|业绩/i.test(title)?'企业财报':source.type==='研究论文'?'研究论文':/发布|推出|launch|introduc|release/i.test(title)&&source.type!=='市场洞察'?'产品发布':baseType;
   if(!domains.length)continue;
   const sourceTag=tag(b,'source');
   const sourceKind=fallback?'新闻聚合':source.kind||(source.url.includes('news.google.com')?'新闻聚合':undefined);
   for(const domain of domains)results.push({
    title,url:canonicalUrl(url),date:/^\d{4}-\d{2}-\d{2}$/.test(rawDate)?rawDate:new Date(time).toISOString(),source:sourceTag||source.name,feedId:source.name,feed:fallback?'Google News · 兜底索引':source.name,
-   language:source.language,sourceKind,region:/中国|国内|工信部|信通院|华为|昇腾|浪潮|中科曙光|新华三|寒武纪|中际旭创|英维克|润泽科技|数据港|宇树|优必选|智元|傅立叶|埃斯顿|汇川|绿的谐波|三花智控|智源|上海人工智能实验室|北京人形|阿里|通义|千问|百度|文心|腾讯|字节|豆包|智谱|月之暗面|科大讯飞|商汤|深度求索|DeepSeek|Qwen|Unitree|UBTECH|MiniMax|Kimi/i.test(context)?'cn':undefined,
-   domain,type:source.scope==='world'?(worldTopic({title,summary:description})||'其他动态'):type,summary:description||undefined,collectedAt:checkedAt,topics:world?['world']:[],scope:source.scope,catalogGroup:source.catalogGroup
+   language:source.language,sourceKind,region:source.region||(/中国|国内|工信部|信通院|华为|昇腾|浪潮|中科曙光|新华三|寒武纪|中际旭创|英维克|润泽科技|数据港|宇树|优必选|智元|傅立叶|埃斯顿|汇川|绿的谐波|三花智控|智源|上海人工智能实验室|北京人形|阿里|通义|千问|百度|文心|腾讯|字节|豆包|智谱|月之暗面|科大讯飞|商汤|深度求索|DeepSeek|Qwen|Unitree|UBTECH|MiniMax|Kimi/i.test(context)?'cn':undefined),
+   domain,type:contentType({title,type,url}),worldCategory:source.scope==='world'?(worldTopic({title,summary:description})||(/财经/.test(source.name)?'经济与金融':source.region==='cn'?'国内热议':'其他动态')):undefined,summary:description||undefined,collectedAt:checkedAt,topics:world?['world']:[],scope:source.scope,catalogGroup:source.catalogGroup
   });
  }
  return results.sort((a,b)=>Date.parse(b.date)-Date.parse(a.date)).slice(0,120);

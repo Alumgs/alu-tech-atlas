@@ -61,6 +61,15 @@ if(process.env.ATLAS_ACCESS_PASSWORD){
   const data=await feed.json();
   must(feed.ok&&Array.isArray(data.items)&&data.statuses?.length===1,'news endpoint contract failed');
   console.log('Feed collection status:',JSON.stringify(data.statuses.map(({name,ok,count})=>({name,ok,count}))));
+  // Domestic source contract and coverage, exercised from the deployed Worker network.
+  const domestic=await Promise.all([50,52,54,55].map(async index=>{
+   const r=await request('/api/updates?source='+index,{headers:{Cookie:cookie}}),d=await r.json();
+   must(r.ok&&Array.isArray(d.items)&&d.statuses?.length===1,'domestic source contract failed: '+index);
+   must(d.items.every(n=>n.region==='cn'),'domestic source missing China region: '+index);
+   return {index,...d.statuses[0]};
+  }));
+  console.log('Domestic collection status:',JSON.stringify(domestic.map(({index,name,ok,count,error})=>({index,name,ok,count,error}))));
+  must(domestic.some(s=>s.ok&&s.count>0),'no direct domestic sources available from deployed Worker');
   const logout=await request('/auth/logout',{method:'POST',headers:{Origin:origin,Cookie:cookie}});
   must(logout.status===303&&logout.headers.get('set-cookie')?.includes('Max-Age=0'),'logout failed');
  }

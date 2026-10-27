@@ -5,7 +5,7 @@ export type SourceTier = 'primary' | 'media' | 'aggregate' | 'other';
 export const tierLabels: Record<SourceTier, string> = {primary:'一手资料',media:'专业媒体',aggregate:'聚合索引',other:'其他来源'};
 // A publisher label alone must not promote an unknown website to an official source.
 const primaryRoots=['nvidia.com','arxiv.org','iea.org','abb.com','serverobotics.com','huawei.com','openai.com','anthropic.com','deepmind.google','research.google','ai.meta.com','huggingface.co','baai.ac.cn','gov.cn','bytedance.com','unitree.com','ubtrobot.com','qwen.ai','un.org','federalreserve.gov','imf.org','worldbank.org'];
-const mediaRoots=['techcrunch.com','datacenterdynamics.com','therobotreport.com','venturebeat.com','infoq.cn','qbitai.com','ieee.org','acm.org','nature.com','science.org','bbc.co.uk','bbc.com'];
+const mediaRoots=['techcrunch.com','datacenterdynamics.com','therobotreport.com','venturebeat.com','infoq.cn','qbitai.com','ieee.org','acm.org','nature.com','science.org','bbc.co.uk','bbc.com','chinanews.com.cn','10jqka.com.cn'];
 const matches=(host:string,root:string)=>host===root||host.endsWith('.'+root);
 export function sourceTier(n:News):SourceTier{
  const host=publicUrl(n.url)?.hostname||'';

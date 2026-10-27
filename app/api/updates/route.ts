@@ -1,6 +1,6 @@
 import {boundedText} from '@/lib/http-safety';
 import {canonicalUrl} from '@/lib/url-safety';
-import {parseFeed} from '@/lib/feed-parser';
+import {parseSource} from '@/lib/domestic-feeds';
 import {sources,type News,type Domain,type FeedSource} from '@/lib/content';
 export const dynamic='force-dynamic';
 
@@ -45,12 +45,12 @@ function errorLabel(error:unknown){
 async function fetchFeed(url:string,source:FeedSource,checkedAt:string,timeoutMs:number,fallback=false){
  const r=await fetch(url,{cache:'no-store',signal:AbortSignal.timeout(timeoutMs),headers:{
   'Cache-Control':'no-cache','Accept':'application/rss+xml, application/atom+xml, application/xml, text/xml, */*;q=0.8',
-  'User-Agent':'KnowledgeAtlas/4.1 (public RSS research reader)'
+  'User-Agent':source.format?'Mozilla/5.0 (compatible; KnowledgeAtlas/4.2)':'KnowledgeAtlas/4.2 (public RSS research reader)'
  }});
  if(!r.ok)throw new Error('HTTP '+r.status);
  const raw=await boundedText(r,2000000);
  if(raw.length>5000000)throw new Error('订阅内容过大');
- const items=parseFeed(raw,source,checkedAt,fallback);
+ const items=parseSource(raw,source,checkedAt,fallback);
  if(!items.length)throw new Error('订阅有响应，但未解析到带有效日期、正文链接和相关内容的条目');
  return items;
 }

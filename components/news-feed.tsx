@@ -1,5 +1,6 @@
-import {relevance} from '@/lib/relevance';
 'use client';
+import {relevance} from '@/lib/relevance';
+import {selectBriefs} from '@/lib/selection';
 import {Localized} from '@/components/language';
 import {useEffect,useMemo,useRef,useState} from 'react';
 import {ArrowUpRight,Bookmark,Check,Download,Flame,ListFilter,Upload} from 'lucide-react';
@@ -43,13 +44,14 @@ export function NewsFeed({items,domain,domainName,loading,query='',newsType='全
  const keys=(event:NewsEvent)=>event.reports.map(identity);
  const isSaved=(event:NewsEvent)=>reading.saved.some(n=>keys(event).includes(identity(n)));
  const isRead=(event:NewsEvent)=>keys(event).some(k=>reading.read.includes(k));
- const filtered=events.filter(event=>
-  (!selectedOnly||savedOnly||((event.primary.summary||'').trim().length>=25&&(scope==='world'||relevance(event.primary,domain)===100)))&&
+ const related=events.filter(event=>
   (tier==='all'||event.reports.some(n=>sourceTier(n)===tier))&&
   (topic==='all'||(scope==='world'?worldTopic(event.primary)===topic:topicList.find(([name])=>name===topic)?.[1].test(event.primary.title+' '+(event.primary.summary||''))))&&
   (!unreadOnly||!isRead(event))&&
   (!numbersOnly||/\d+(?:\.\d+)?\s*(?:%|％|亿|万|mw|gw|kw|twh|参数|亿美元)|同比|环比|吞吐|时延|出货|订单/i.test(event.primary.title+' '+(event.primary.summary||'')))
  ).sort((a,b)=>sort==='date'?Date.parse(b.latestDate)-Date.parse(a.latestDate):sort==='heat'?b.heat-a.heat||b.score-a.score:(scope==='world'?0:relevance(b.primary,domain)-relevance(a.primary,domain))||b.score-a.score||Date.parse(b.latestDate)-Date.parse(a.latestDate));
+ const selected=selectBriefs(related,scope);
+ const filtered=selectedOnly&&!savedOnly?selected:related;
  function save(event:NewsEvent){
   setNotice('');const ids=keys(event);
   setReading(old=>({read:old.read,saved:isSaved(event)?old.saved.filter(n=>!ids.includes(identity(n))):[event.primary,...old.saved].slice(0,200)}));
@@ -65,14 +67,14 @@ export function NewsFeed({items,domain,domainName,loading,query='',newsType='全
  }
  return <section className="event-feed" aria-label="按事件整理的产业资讯">
   <div className="event-feed-heading"><div><span className="eyebrow">INDUSTRY BRIEF / <Localized value={savedOnly?'我的收藏':'行业脉络'}/></span><h2>{savedOnly?t('收藏资料','Saved reading'):domainName+' · '+t('事件精选','Event briefs')}</h2><p>{savedOnly?t('本机保存的资料快照，保留原文日期，可导出备份。','Local snapshots with original dates; backups are available.'):t('报道','Reports')+' '+pool.length+' → '+t('阅读事件','Events')+' '+events.length+' · '+t('每条均保留原文来源与时间线','Each event keeps its sources and reporting timeline')}</p></div><span className="event-count">{filtered.length}<small><Localized value={"阅读事件"}/> </small></span></div>
-  <div className="event-toolbar"><div className="event-sort" role="group" aria-label="内容范围">{[[true,'精选','Selected'],[false,'全部相关动态','All relevant updates']].map(([value,zh,en])=><button key={String(value)} className={selectedOnly===value?'selected':''} aria-pressed={selectedOnly===value} onClick={()=>setSelectedOnly(value as boolean)}>{t(zh as string,en as string)}</button>)}</div>
+  <div className="event-toolbar"><div className="event-sort" role="group" aria-label="内容范围">{[[true,'精选','Selected'],[false,'全部相关动态','All relevant updates']].map(([value,zh,en])=><button key={String(value)} className={selectedOnly===value?'selected':''} aria-pressed={selectedOnly===value} onClick={()=>setSelectedOnly(value as boolean)}>{t(zh as string,en as string)} {value?selected.length:related.length}</button>)}</div>
    <div className="event-sort" role="group" aria-label="资讯排序">{[['score','推荐'],['date','最新'],['heat','热度']].map(([key,label])=><button key={key} className={sort===key?'selected':''} aria-pressed={sort===key} onClick={()=>setSort(key)}>{key==='heat'&&<Flame size={14}/>} {t(label)}</button>)}</div>
    <label><ListFilter size={14}/><select aria-label="按来源层级筛选" value={tier} onChange={e=>setTier(e.target.value)}><option value="all">{t('全部来源层级')}</option>{(Object.keys(tierLabels) as SourceTier[]).map(key=><option value={key} key={key}>{t(tierLabels[key])}</option>)}</select></label>
    <button aria-pressed={savedOnly} className={savedOnly?'selected':''} onClick={()=>setSavedOnly(!savedOnly)}><Bookmark size={14}/>{t('收藏')}</button>
    <label className="event-toggle"><input type="checkbox" checked={unreadOnly} onChange={e=>setUnreadOnly(e.target.checked)}/>{t('只看未读')}</label>
    <label className="event-toggle"><input type="checkbox" checked={numbersOnly} onChange={e=>setNumbersOnly(e.target.checked)}/>{t('含量化信息')}</label>
   </div>
-  <div className="event-topics"><button className={topic==='all'?'selected':''} onClick={()=>setTopic('all')}>{t('全部主题')}</button>{topicList.map(([name])=><button className={topic===name?'selected':''} key={name} onClick={()=>setTopic(name)}>{t(name)}</button>)}</div>
+  <p className="selection-explanation">{selectedOnly?t('精选：摘要与来源达到门槛（官方政策原文可仅有标题）；每个发布方最多 2 条，最多 12 个事件。','Selected: source and material thresholds; at most 2 per publisher and 12 events.'):t('全部相关动态：保留所有通过主题检查的报道，包括标题快讯和社区讨论。','All relevant reports, including short alerts and community discussions.')}</p><div className="event-topics"><button className={topic==='all'?'selected':''} onClick={()=>setTopic('all')}>{t('全部主题')}</button>{topicList.map(([name])=><button className={topic===name?'selected':''} key={name} onClick={()=>setTopic(name)}>{t(name)}</button>)}</div>
   <div className="event-list">{filtered.slice(0,limit).map((event,index)=>{
    const n=event.primary,saved=isSaved(event),readBefore=isRead(event);
    return <article key={event.id} className={'event-card '+(index===0&&sort==='score'?'event-lead ':'')+(readBefore?'event-read':'')}>
@@ -88,7 +90,7 @@ export function NewsFeed({items,domain,domainName,loading,query='',newsType='全
   })}</div>
   {!filtered.length&&<div className="editorial-empty"><Localized value={loading&&!savedOnly?'正在采集公开来源，成功后自动显示。':'暂无匹配事件，可扩大时间范围、切换来源层级或取消未读筛选。'}/></div>}
   {filtered.length>limit&&<button className="editorial-more" onClick={()=>setLimit(n=>n+pageSize)}><Localized value={"加载更多（"}/> {limit} / {filtered.length}<Localized value={"个事件）"}/> </button>}
-  <details className="event-method"><summary><Localized value={"筛选方法与阅读备份"}/> </summary><p><Localized value={"精选要求有来源摘要，专业栏目还要求标题直接关联本领域；摘要才涉及本领域的内容放入全部相关动态。先按标题与摘要核验领域相关性；来源名称与订阅栏目不作为相关性证据。世界主题优先依据标题，摘要仅在标题无法分类时补充，标签与筛选共用同一分类结果。通过后再按原文时效、来源域名、资料类型和摘要完整度计算，不是事实真实性评级。链接先去除追踪参数，再保守合并近似标题；不同版本号、季度或量化结果保留为独立进展。含量化信息仅按关键词筛选。热度仅统计本站已采集报道：48 小时内每个关联来源只计一次，24 小时权重减半。预印本不等于同行评审，厂商说明不等于独立评测。"}/> </p><p><Localized value={"收藏与阅读记录只保存在当前浏览器，最多保存 200 条收藏。备份文件可在其他设备导入，导入不会覆盖已有记录。"}/> </p><div><button onClick={backup}><Download size={14}/><Localized value={"导出阅读备份"}/> </button><button onClick={()=>importRef.current?.click()}><Upload size={14}/><Localized value={"导入备份"}/> </button><input ref={importRef} type="file" accept="application/json,.json" hidden onChange={e=>{const f=e.target.files?.[0];if(f)void restore(f);}}/></div></details>
+  <details className="event-method"><summary><Localized value={"筛选方法与阅读备份"}/> </summary><p><Localized value={"精选要求有来源摘要和足够的资料优先级，专业栏目标题直接相关；最多12个事件、同一发布方最多2条。社区热议仅进入全部相关动态。先按标题与摘要核验领域相关性；来源名称与订阅栏目不作为相关性证据。世界主题优先依据标题，摘要仅在标题无法分类时补充，标签与筛选共用同一分类结果。通过后再按原文时效、来源域名、资料类型和摘要完整度计算，不是事实真实性评级。链接先去除追踪参数，再保守合并近似标题；不同版本号、季度或量化结果保留为独立进展。含量化信息仅按关键词筛选。热度仅统计本站已采集报道：48 小时内每个关联来源只计一次，24 小时权重减半。预印本不等于同行评审，厂商说明不等于独立评测。"}/> </p><p><Localized value={"收藏与阅读记录只保存在当前浏览器，最多保存 200 条收藏。备份文件可在其他设备导入，导入不会覆盖已有记录。"}/> </p><div><button onClick={backup}><Download size={14}/><Localized value={"导出阅读备份"}/> </button><button onClick={()=>importRef.current?.click()}><Upload size={14}/><Localized value={"导入备份"}/> </button><input ref={importRef} type="file" accept="application/json,.json" hidden onChange={e=>{const f=e.target.files?.[0];if(f)void restore(f);}}/></div></details>
   {notice&&<p role="status" className="editorial-message">{notice}</p>}
  </section>;
 }

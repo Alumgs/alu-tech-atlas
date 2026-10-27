@@ -46,7 +46,7 @@ const rows:Row[]=[
 ];
 const baseArticles:Article[]=rows.map((r)=>({id:r[0],domain:r[1],category:r[2],title:r[3],summary:r[4],level:r[5],minutes:4,sections:[{title:'核心概念',text:r[6]},{title:'技术要点',text:r[7]},{title:'现场应用',text:r[8]}],checks:r[9],sourceName:refs[r[10]][0],source:refs[r[10]][1],kind:r[11]||'手册'}));
 export const articles:Article[]=[...baseArticles.map(a=>({...a,minutes:9,category:a.domain==='robot'?(['r02','r03','r05'].includes(a.id)?'硬件 · ':'软件 · ')+a.category:a.category,sections:[...a.sections,{title:'工作原理与系统约束',text:deep[a.id].principle},{title:'工程实现与验证',text:deep[a.id].engineering}]})),...newArticles];
-export type News={title:string;url:string;date:string;source:string;domain:Domain;type:string;summary?:string;historical?:boolean;topics?:string[];collectedAt?:string;stale?:boolean;feed?:string;feedId?:string;region?:'cn';language?:'zh';sourceKind?:string;scope?:'world';catalogGroup?:string};
+export type News={title:string;url:string;date:string;source:string;domain:Domain;type:string;summary?:string;historical?:boolean;topics?:string[];collectedAt?:string;stale?:boolean;feed?:string;feedId?:string;region?:'cn';language?:'zh';sourceKind?:string;scope?:'world';catalogGroup?:string;worldCategory?:string};
 export const curated:News[]=[
 {title:'NVIDIA FY2027 Q2：数据中心业务继续扩张',url:'https://nvidianews.nvidia.com/news/nvidia-announces-financial-results-for-second-quarter-fiscal-2027',date:'2026-08-26',source:'NVIDIA 官方财报',domain:'aidc',type:'企业财报',summary:'季度营收 962.21 亿美元；数据中心营收约 890 亿美元。注意财年与自然年口径。',historical:true},
 {title:'用 Isaac GR00T 构建端到端人形机器人策略',url:'https://developer.nvidia.com/blog/develop-humanoid-robot-policies-end-to-end-with-nvidia-isaac-gr00t/',date:'2026-07-07',source:'NVIDIA Developer',domain:'robot',type:'技术研究',summary:'官方开发工作流覆盖数据采集、仿真训练、验证与真实部署。',historical:true},
@@ -66,7 +66,7 @@ export const companies=[
 ];
 export const newsTypes=['全部','技术研究','研究论文','市场洞察','企业财报','产品发布','政策法规'];
 const newsFeed=(query:string,english=false)=>'https://news.google.com/rss/search?q='+encodeURIComponent(query+' when:30d')+(english?'&hl=en-US&gl=US&ceid=US:en':'&hl=zh-CN&gl=CN&ceid=CN:zh-Hans');
-export type FeedSource={name:string;url:string;domain:Domain|'both';type:string;description:string;language?:'zh';kind?:'官方直连'|'媒体直连'|'新闻聚合';catalogGroup?:string;scope?:'world'};
+export type FeedSource={name:string;url:string;domain:Domain|'both';type:string;description:string;language?:'zh';kind?:'官方直连'|'媒体直连'|'新闻聚合';catalogGroup?:string;scope?:'world';region?:'cn';format?:'zhihu'|'ths'};
 export const sources:FeedSource[]=[
 {name:'TechCrunch · AI',url:'https://techcrunch.com/category/artificial-intelligence/feed/',domain:'ml',type:'市场洞察',description:'AI 公司、融资与商业应用报道；媒体观点和企业财报分开核查。'},
 {name:'DCD · 数据中心产业',url:'https://www.datacenterdynamics.com/en/rss/',domain:'aidc',type:'市场洞察',description:'数据中心专业媒体的独立订阅源；投资、工程和供应链报道须结合原始资料核查。'},
@@ -155,3 +155,21 @@ sources.push(
  {name:'世界热点 · 中文索引',url:newsFeed('(国际 OR 全球) (经济 OR 科技 OR 能源 OR 外交 OR 气候 OR 政策)'),domain:'both',scope:'world',type:'国际时事',language:'zh',kind:'新闻聚合',description:'中文国际热点公开新闻索引，需打开原文交叉核查。'},
  {name:'中国经济 · 政策索引',url:newsFeed('(site:gov.cn OR site:news.cn OR site:people.com.cn) (经济 OR 科技 OR 能源 OR 政策)'),domain:'both',scope:'world',type:'政策法规',language:'zh',kind:'新闻聚合',description:'中国政府、新华社与人民日报公开索引；不保证搜索覆盖完整。'}
 );
+
+// Direct domestic feeds: no Google News dependency for these entries.
+sources.push(
+ {name:'中国政府网 · 政策原文',url:'https://www.gov.cn/pushinfo/v150203/rss.xml',domain:'both',scope:'world',region:'cn',language:'zh',type:'政策法规',kind:'官方直连',description:'国务院政策原文订阅；按原文日期展示，政策栏目与新闻主题分别筛选。'},
+ {name:'中国政府网 · 产业政策',url:'https://www.gov.cn/pushinfo/v150203/rss.xml',domain:'both',region:'cn',language:'zh',type:'政策法规',kind:'官方直连',description:'同一政府订阅中仅提取与智算、机器人、人工智能直接相关的政策。'},
+ {name:'中新网 · 财经',url:'https://www.chinanews.com.cn/rss/finance.xml',domain:'both',scope:'world',region:'cn',language:'zh',type:'市场洞察',kind:'媒体直连',description:'中新网财经原站订阅，国内经济、产业与金融新闻。'},
+ {name:'中新网 · 时政',url:'https://www.chinanews.com.cn/rss/china.xml',domain:'both',scope:'world',region:'cn',language:'zh',type:'国际时事',kind:'媒体直连',description:'中新网国内时政订阅；政策解读不等同政策原文。'},
+ {name:'知乎 · 热榜',url:'https://api.zhihu.com/topstory/hot-lists/total?limit=50',format:'zhihu',domain:'both',scope:'world',region:'cn',language:'zh',type:'社区热议',kind:'新闻聚合',description:'知乎公开热榜问题与摘要，标为社区讨论；日期为问题创建时间，不把热榜采集时间当新闻日期。'},
+ {name:'同花顺 · 财经快讯',url:'https://news.10jqka.com.cn/tapp/news/push/stock/?page=1&tag=',format:'ths',domain:'both',scope:'world',region:'cn',language:'zh',type:'市场洞察',kind:'媒体直连',description:'同花顺公开财经快讯；使用原始时间，源站限流或拒绝时显示失败。'}
+);
+
+for(const group of ['投行与咨询','私募与产业资本','披露与政策']){
+ const hosts=institutionGroups[group];if(!hosts)continue;
+ sources.push({name:'世界研报 · '+group+'宏观',url:newsFeed('('+hosts.map(h=>'site:'+h).join(' OR ')+') (economy OR inflation OR rates OR outlook OR 经济 OR 金融 OR 政策)',true),domain:'both',scope:'world',type:group==='披露与政策'?'政策法规':'市场洞察',kind:'新闻聚合',catalogGroup:group,description:'用户来源库中的机构公开宏观、金融与政策研究索引；只展示实际采集到的条目，不含付费全文。'});
+}
+for(const name of ['同花顺 · 财经快讯','知乎 · 热榜','中新网 · 财经']){
+ const source=sources.find(s=>s.name===name)!;sources.push({...source,name:name+' · 专业领域',scope:undefined,description:source.description+' 仅分流标题或摘要明确关联专业领域的内容。'});
+}

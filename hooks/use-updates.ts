@@ -5,7 +5,7 @@ import {sources,type News,type Domain} from '@/lib/content';
 import {canonicalUrl,publicUrl} from '@/lib/url-safety';
 export type FeedStatus={name:string;ok:boolean;count:number;error?:string;warning?:string;fallback?:boolean;checkedAt:string;latestPublishedAt?:string;durationMs?:number};
 export type UpdateResult={items:News[];statuses:FeedStatus[];checkedAt:string;cached?:boolean};
-const KEY='atlas-updates-v7';
+const KEY='atlas-updates-v8';
 const day=(value=Date.now())=>new Date(value).toLocaleDateString('en-CA',{timeZone:'Asia/Shanghai'});
 export function mergeItems(items:News[]){
  const unique=new Map<string,News>();
@@ -34,7 +34,7 @@ export function useUpdates(domain:Domain){
   finally{if(abort.current?.signal===signal){active.current=false;if(!signal.aborted)setLoading(false);}}
  },[]);
  useEffect(()=>{
-  let saved:UpdateResult|null=null;try{saved=JSON.parse(localStorage.getItem(KEY)||localStorage.getItem('atlas-updates-v6')||'null');}catch{}
+  let saved:UpdateResult|null=null;try{saved=JSON.parse(localStorage.getItem(KEY)||localStorage.getItem('atlas-updates-v7')||'null');}catch{}
   if(saved&&Array.isArray(saved.items)&&Array.isArray(saved.statuses)){saved.items=mergeItems(saved.items);current.current=saved;setData(saved);setIsOld(true);const recent=Date.now()-Date.parse(saved.checkedAt)<15*60000&&day(Date.parse(saved.checkedAt))===day();if(recent&&saved.statuses.length===sources.length&&saved.statuses.some(s=>s.ok)){setIsOld(false);setProgress(sources.length);lastAttempt.current=Date.parse(saved.checkedAt);}else void refresh();}else void refresh();
   const check=()=>{if(document.visibilityState==='visible'&&(Date.now()-lastAttempt.current>15*60000||day(lastAttempt.current)!==day()))void refresh();};
   const timer=setInterval(check,60000);document.addEventListener('visibilitychange',check);

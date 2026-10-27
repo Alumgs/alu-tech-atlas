@@ -18,7 +18,7 @@ test('world topics match words and reuse one principal category for labels and f
  assert.equal(worldTopic(row('Scientists celebrate discovery')) ,'科技与科学');
  assert.equal(worldTopic(row('Hospital expands education programme')),'社会与公共政策');
  const old={...row('War displaces thousands','Trade affected'),scope:'world' as const,type:'市场洞察'};
- assert.equal(classifyNews(old).type,'国际时事');
+ assert.equal(classifyNews(old).worldCategory,'国际时事');
 });
 test('fixed-domain feeds cannot bypass content gates; cross-domain content is routed by evidence',()=>{
  const source:FeedSource={name:'AIDC source',url:'https://example.com/rss',domain:'aidc',type:'市场洞察',description:''};
