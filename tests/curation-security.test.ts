@@ -50,7 +50,7 @@ test('public links reject credentials, private IP variants, internal names and u
 });
 test('RSS and Atom preserve dates and snippets, choose alternate links and reject unsafe links',()=>{
  const source:FeedSource={name:'测试来源',url:'https://arxiv.org/rss/cs.LG',domain:'ml',type:'研究论文',description:''};
- const xml='<feed><entry><title>研究 &amp; 验证</title><link rel="self" href="https://arxiv.org/api/1"/><link rel="alternate" href="https://arxiv.org/abs/2601.1?utm_source=rss"/><published>2026-01-01T00:00:00Z</published><summary><![CDATA[<p>公开实验摘要与基线</p>]]></summary></entry><entry><title>恶意链接</title><link href="javascript:alert(1)"/><published>2026-01-01</published></entry><entry><title>无可信日期</title><link href="https://arxiv.org/abs/2"/></entry></feed>';
+ const xml='<feed><entry><title>机器学习研究 &amp; 验证</title><link rel="self" href="https://arxiv.org/api/1"/><link rel="alternate" href="https://arxiv.org/abs/2601.1?utm_source=rss"/><published>2026-01-01T00:00:00Z</published><summary><![CDATA[<p>公开实验摘要与基线</p>]]></summary></entry><entry><title>恶意链接</title><link href="javascript:alert(1)"/><published>2026-01-01</published></entry><entry><title>无可信日期</title><link href="https://arxiv.org/abs/2"/></entry></feed>';
  const rows=parseFeed(xml,source,'2026-10-13T00:00:00Z');
  assert.equal(rows.length,1);assert.equal(rows[0].url,'https://arxiv.org/abs/2601.1');assert.equal(rows[0].summary,'公开实验摘要与基线');assert.equal(rows[0].date,'2026-01-01T00:00:00.000Z');assert.equal(rows[0].feedId,source.name);
 });
@@ -93,6 +93,6 @@ test('date-only sources retain calendar dates and are never displayed with an in
  assert.equal(publicationLabel('2026-10-13'),'2026-10-13（原文仅提供日期）');
  assert.ok(publicationLabel('2026-10-13T00:00:00Z').includes('08:00'));
  const source:FeedSource={name:'资料源',url:'https://arxiv.org/rss/cs.LG',domain:'ml',type:'研究论文',description:''};
- const rows=parseFeed('<rss><item><title>日期示例</title><link>https://arxiv.org/abs/2601.2</link><pubDate>2026-01-01</pubDate></item></rss>',source,'2026-10-13T00:00:00Z');
+ const rows=parseFeed('<rss><item><title>机器学习日期示例</title><link>https://arxiv.org/abs/2601.2</link><pubDate>2026-01-01</pubDate></item></rss>',source,'2026-10-13T00:00:00Z');
  assert.equal(rows[0].date,'2026-01-01');
 });

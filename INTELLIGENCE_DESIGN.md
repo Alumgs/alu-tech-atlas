@@ -24,3 +24,9 @@ Inspired by the collection → selection → event grouping → trends → repor
 ## Verification
 
 TypeScript, existing regression tests plus world-stream/provenance/translation tests, production build and Wrangler deployment dry run. The dedicated translation model was checked against the connected Cloudflare account. Managed browser preview requires a Cloudflare credential unavailable in the preview runtime; no authentication bypass is added for testing. CI performs production health and authenticated route checks when its configured password is current.
+
+## Relevance correction (2026-10-27)
+
+Content gates run before source/recency ranking: fixed-domain feeds no longer bypass topic checks. Classification uses title/snippet evidence, never publisher or feed names. Generic earnings, model, agent, network and infrastructure terms are insufficient on their own. Old browser snapshots are revalidated and world categories recomputed.
+
+Default professional selections require direct title evidence and at least 25 characters of source snippet. Summary-only domain evidence remains available under “All relevant updates”; rejected material cannot re-enter through sorting, hot cards or saved views. World filters and card labels use one principal category, title first and snippet only if inconclusive, with English word boundaries. World has no duplicate content-type taxonomy or professional subnavigation. This is a deterministic layered gate inspired by AIHOT's prefilter/selection separation, not its independent double-LLM scoring pipeline. It can miss unusual terminology; no semantic accuracy percentage is claimed. Regression fixtures cover the supplied screenshot's displaced-persons and UN anniversary stories, generic business leakage, old categories and fixed-feed bypasses.
