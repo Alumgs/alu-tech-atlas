@@ -1,6 +1,6 @@
 'use client';
 import {relevance} from '@/lib/relevance';
-import {selectBriefs} from '@/lib/selection';
+import {selectBriefs,balanceWorld} from '@/lib/selection';
 import {Localized} from '@/components/language';
 import {useEffect,useMemo,useRef,useState} from 'react';
 import {ArrowUpRight,Bookmark,Check,Download,Flame,ListFilter,Upload} from 'lucide-react';
@@ -32,7 +32,7 @@ const topics:Record<Domain,Array<[string,RegExp]>>={
 export function NewsFeed({items,domain,domainName,loading,query='',newsType='全部',region='all',pageSize=24,scope=domain}:{items:News[];domain:Domain;domainName:string;loading:boolean;query?:string;newsType?:string;region?:string;pageSize?:number;scope?:StreamScope}){
  const {t}=useLanguage();
  const topicList=scope==='world'?worldTopics.map(([zh,,re])=>[zh,re] as [string,RegExp]):topics[domain];
- const [reading,setReading]=useState<Reading>(emptyReading),[ready,setReady]=useState(false),[sort,setSort]=useState('score'),[selectedOnly,setSelectedOnly]=useState(true),[tier,setTier]=useState('all'),[topic,setTopic]=useState('all');
+ const [reading,setReading]=useState<Reading>(emptyReading),[ready,setReady]=useState(false),[sort,setSort]=useState('score'),[selectedOnly,setSelectedOnly]=useState(scope!=='world'),[tier,setTier]=useState('all'),[topic,setTopic]=useState('all');
  const [savedOnly,setSavedOnly]=useState(false),[unreadOnly,setUnreadOnly]=useState(false),[numbersOnly,setNumbersOnly]=useState(false),[limit,setLimit]=useState(pageSize),[notice,setNotice]=useState(''),[ascending,setAscending]=useState(false);
  const importRef=useRef<HTMLInputElement>(null);
  useEffect(()=>{try{setReading(safeReading(JSON.parse(localStorage.getItem(storageKey)||'{}')));}catch{}setReady(true);},[]);
@@ -44,12 +44,13 @@ export function NewsFeed({items,domain,domainName,loading,query='',newsType='全
  const keys=(event:NewsEvent)=>event.reports.map(identity);
  const isSaved=(event:NewsEvent)=>reading.saved.some(n=>keys(event).includes(identity(n)));
  const isRead=(event:NewsEvent)=>keys(event).some(k=>reading.read.includes(k));
- const related=events.filter(event=>
+ const matched=events.filter(event=>
   (tier==='all'||event.reports.some(n=>sourceTier(n)===tier))&&
   (topic==='all'||(scope==='world'?worldTopic(event.primary)===topic:topicList.find(([name])=>name===topic)?.[1].test(event.primary.title+' '+(event.primary.summary||''))))&&
   (!unreadOnly||!isRead(event))&&
   (!numbersOnly||/\d+(?:\.\d+)?\s*(?:%|％|亿|万|mw|gw|kw|twh|参数|亿美元)|同比|环比|吞吐|时延|出货|订单/i.test(event.primary.title+' '+(event.primary.summary||'')))
  ).sort((a,b)=>sort==='date'?Date.parse(b.latestDate)-Date.parse(a.latestDate):sort==='heat'?b.heat-a.heat||b.score-a.score:(scope==='world'?0:relevance(b.primary,domain)-relevance(a.primary,domain))||b.score-a.score||Date.parse(b.latestDate)-Date.parse(a.latestDate));
+ const related=scope==='world'&&sort==='score'?balanceWorld(matched):matched;
  const selected=selectBriefs(related,scope);
  const filtered=selectedOnly&&!savedOnly?selected:related;
  function save(event:NewsEvent){
@@ -74,7 +75,7 @@ export function NewsFeed({items,domain,domainName,loading,query='',newsType='全
    <label className="event-toggle"><input type="checkbox" checked={unreadOnly} onChange={e=>setUnreadOnly(e.target.checked)}/>{t('只看未读')}</label>
    <label className="event-toggle"><input type="checkbox" checked={numbersOnly} onChange={e=>setNumbersOnly(e.target.checked)}/>{t('含量化信息')}</label>
   </div>
-  <p className="selection-explanation">{selectedOnly?t('精选：摘要与来源达到门槛（官方政策原文可仅有标题）；每个发布方最多 2 条，最多 12 个事件。','Selected: source and material thresholds; at most 2 per publisher and 12 events.'):t('全部相关动态：保留所有通过主题检查的报道，包括标题快讯和社区讨论。','All relevant reports, including short alerts and community discussions.')}</p><div className="event-topics"><button className={topic==='all'?'selected':''} onClick={()=>setTopic('all')}>{t('全部主题')}</button>{topicList.map(([name])=><button className={topic===name?'selected':''} key={name} onClick={()=>setTopic(name)}>{t(name)}</button>)}</div>
+  <p className="selection-explanation">{selectedOnly?t('精选：摘要与来源达到门槛（官方政策原文可仅有标题）；每个发布方最多 2 条，最多 12 个事件。','Selected: source and material thresholds; at most 2 per publisher and 12 events.'):t(scope==='world'?'全部相关动态：综合排序兼顾不同主题和发布方；可切换最新或热度查看。':'全部相关动态：保留所有通过主题检查的报道，包括标题快讯和社区讨论。','All relevant reports; recommendations balance subjects and publishers.')}</p><div className="event-topics"><button className={topic==='all'?'selected':''} onClick={()=>setTopic('all')}>{t('全部主题')}</button>{topicList.map(([name])=><button className={topic===name?'selected':''} key={name} onClick={()=>setTopic(name)}>{t(name)}</button>)}</div>
   <div className="event-list">{filtered.slice(0,limit).map((event,index)=>{
    const n=event.primary,saved=isSaved(event),readBefore=isRead(event);
    return <article key={event.id} className={'event-card '+(index===0&&sort==='score'?'event-lead ':'')+(readBefore?'event-read':'')}>

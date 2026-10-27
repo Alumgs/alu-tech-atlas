@@ -1,3 +1,4 @@
+import {parseOfficialNews} from './official-news.ts';
 import {parseFeed} from './feed-parser.ts';
 import {classifyNews,relevantDomains} from './relevance.ts';
 import {publicUrl,canonicalUrl} from './url-safety.ts';
@@ -5,6 +6,7 @@ import type {FeedSource,News} from './content';
 const obj=(v:unknown):Record<string,unknown>=>v&&typeof v==='object'?v as Record<string,unknown>:{};
 const plain=(v:unknown)=>typeof v==='string'?v.replace(/<[^>]*>/g,' ').replace(/\s+/g,' ').trim():'';
 export function parseSource(raw:string,source:FeedSource,checkedAt:string,fallback=false):News[]{
+ if(source.format==='anthropic')return parseOfficialNews(raw,source,checkedAt);
  if(!source.format)return parseFeed(raw,source,checkedAt,fallback);
  const payload=obj(JSON.parse(raw)),data=source.format==='zhihu'?payload.data:obj(payload.data).list;
  if(!Array.isArray(data))throw Error('来源 JSON 格式无效');

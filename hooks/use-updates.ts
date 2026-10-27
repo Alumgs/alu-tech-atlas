@@ -1,11 +1,11 @@
-import {classifyNews,eligible} from '@/lib/relevance';
 'use client';
+import {classifyNews,eligible} from '@/lib/relevance';
 import {useState,useEffect,useRef,useCallback,startTransition} from 'react';
 import {sources,type News,type Domain} from '@/lib/content';
 import {canonicalUrl,publicUrl} from '@/lib/url-safety';
 export type FeedStatus={name:string;ok:boolean;count:number;error?:string;warning?:string;fallback?:boolean;checkedAt:string;latestPublishedAt?:string;durationMs?:number};
 export type UpdateResult={items:News[];statuses:FeedStatus[];checkedAt:string;cached?:boolean};
-const KEY='atlas-updates-v8';
+const KEY='atlas-updates-v9';
 const day=(value=Date.now())=>new Date(value).toLocaleDateString('en-CA',{timeZone:'Asia/Shanghai'});
 export function mergeItems(items:News[]){
  const unique=new Map<string,News>();
@@ -21,7 +21,7 @@ export function useUpdates(domain:Domain){
   const previous=current.current;const oldKeys=new Set(previous?.items.map(n=>(n.scope||n.domain)+n.url)||[]);
   // Keep per-feed copies until final deduplication so a failed duplicate cannot hide a fresh item.
   const perFeed=new Map<string,News[]>();for(const n of previous?.items||[]){const key=n.feedId||n.feed||'';perFeed.set(key,[...(perFeed.get(key)||[]),{...n,stale:true}]);}
-  const statuses:FeedStatus[]=[];const order=sources.map((s,index)=>({s,index})).sort((a,b)=>Number(b.s.domain===domainRef.current||b.s.scope==='world')-Number(a.s.domain===domainRef.current||a.s.scope==='world'));
+  const statuses:FeedStatus[]=[];const order=sources.map((s,index)=>({s,index})).sort((a,b)=>(Number(b.s.scope==='world')*4+Number(!b.s.url.includes('news.google.com'))*3+Number(b.s.domain===domainRef.current))-(Number(a.s.scope==='world')*4+Number(!a.s.url.includes('news.google.com'))*3+Number(a.s.domain===domainRef.current)));
   let cursor=0,complete=0,lastPaint=0;
   const publish=()=>{const items=mergeItems([...perFeed.values()].flat());const result={items,statuses:[...statuses],checkedAt:new Date().toISOString()};current.current=result;startTransition(()=>{setData(result);setProgress(complete);setAdded(items.filter(n=>!n.stale&&!oldKeys.has((n.scope||n.domain)+n.url)).length);setIsOld(!statuses.some(s=>s.ok));});};
   const worker=async()=>{while(cursor<order.length&&!signal.aborted){const {s,index}=order[cursor++];try{
@@ -34,7 +34,7 @@ export function useUpdates(domain:Domain){
   finally{if(abort.current?.signal===signal){active.current=false;if(!signal.aborted)setLoading(false);}}
  },[]);
  useEffect(()=>{
-  let saved:UpdateResult|null=null;try{saved=JSON.parse(localStorage.getItem(KEY)||localStorage.getItem('atlas-updates-v7')||'null');}catch{}
+  let saved:UpdateResult|null=null;try{saved=JSON.parse(localStorage.getItem(KEY)||localStorage.getItem('atlas-updates-v8')||'null');}catch{}
   if(saved&&Array.isArray(saved.items)&&Array.isArray(saved.statuses)){saved.items=mergeItems(saved.items);current.current=saved;setData(saved);setIsOld(true);const recent=Date.now()-Date.parse(saved.checkedAt)<15*60000&&day(Date.parse(saved.checkedAt))===day();if(recent&&saved.statuses.length===sources.length&&saved.statuses.some(s=>s.ok)){setIsOld(false);setProgress(sources.length);lastAttempt.current=Date.parse(saved.checkedAt);}else void refresh();}else void refresh();
   const check=()=>{if(document.visibilityState==='visible'&&(Date.now()-lastAttempt.current>15*60000||day(lastAttempt.current)!==day()))void refresh();};
   const timer=setInterval(check,60000);document.addEventListener('visibilitychange',check);

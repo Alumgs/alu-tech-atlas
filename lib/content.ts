@@ -66,7 +66,7 @@ export const companies=[
 ];
 export const newsTypes=['全部','技术研究','研究论文','市场洞察','企业财报','产品发布','政策法规'];
 const newsFeed=(query:string,english=false)=>'https://news.google.com/rss/search?q='+encodeURIComponent(query+' when:30d')+(english?'&hl=en-US&gl=US&ceid=US:en':'&hl=zh-CN&gl=CN&ceid=CN:zh-Hans');
-export type FeedSource={name:string;url:string;domain:Domain|'both';type:string;description:string;language?:'zh';kind?:'官方直连'|'媒体直连'|'新闻聚合';catalogGroup?:string;scope?:'world';region?:'cn';format?:'zhihu'|'ths'};
+export type FeedSource={name:string;url:string;domain:Domain|'both';type:string;description:string;language?:'zh';kind?:'官方直连'|'媒体直连'|'新闻聚合';catalogGroup?:string;scope?:'world';region?:'cn';format?:'zhihu'|'ths'|'anthropic'};
 export const sources:FeedSource[]=[
 {name:'TechCrunch · AI',url:'https://techcrunch.com/category/artificial-intelligence/feed/',domain:'ml',type:'市场洞察',description:'AI 公司、融资与商业应用报道；媒体观点和企业财报分开核查。'},
 {name:'DCD · 数据中心产业',url:'https://www.datacenterdynamics.com/en/rss/',domain:'aidc',type:'市场洞察',description:'数据中心专业媒体的独立订阅源；投资、工程和供应链报道须结合原始资料核查。'},
@@ -173,3 +173,11 @@ for(const group of ['投行与咨询','私募与产业资本','披露与政策']
 for(const name of ['同花顺 · 财经快讯','知乎 · 热榜','中新网 · 财经']){
  const source=sources.find(s=>s.name===name)!;sources.push({...source,name:name+' · 专业领域',scope:undefined,description:source.description+' 仅分流标题或摘要明确关联专业领域的内容。'});
 }
+
+sources.push(
+ {name:'Anthropic · 官方新闻室',url:'https://www.anthropic.com/news',format:'anthropic',domain:'ml',type:'技术研究',kind:'官方直连',description:'直连官方新闻室，涵盖 Claude、研究、融资与 IPO/S-1 公告，保留原始发布日期。'},
+ {name:'Anthropic · 世界公司动态',url:'https://www.anthropic.com/news',format:'anthropic',domain:'ml',scope:'world',type:'技术研究',kind:'官方直连',description:'官方公司与技术新闻，覆盖重要资本市场和产业进展。'},
+ {name:'The Verge · AI',url:'https://www.theverge.com/rss/ai-artificial-intelligence/index.xml',domain:'ml',type:'市场洞察',kind:'媒体直连',description:'AI 公司、产品和商业事件的独立媒体报道。'},
+ {name:'The Verge · 世界科技',url:'https://www.theverge.com/rss/ai-artificial-intelligence/index.xml',domain:'ml',scope:'world',type:'市场洞察',kind:'媒体直连',description:'科技与公司事件报道，补充世界热点中的科技商业覆盖。'},
+ {name:'TechCrunch · 世界科技商业',url:'https://techcrunch.com/category/artificial-intelligence/feed/',domain:'ml',scope:'world',type:'市场洞察',kind:'媒体直连',description:'AI 公司融资、商业与产品事件，与专业栏目共用原始订阅。'}
+);

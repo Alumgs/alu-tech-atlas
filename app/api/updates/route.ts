@@ -1,3 +1,4 @@
+import {articleDescription} from '@/lib/official-news';
 import {boundedText} from '@/lib/http-safety';
 import {canonicalUrl} from '@/lib/url-safety';
 import {parseSource} from '@/lib/domestic-feeds';
@@ -51,6 +52,13 @@ async function fetchFeed(url:string,source:FeedSource,checkedAt:string,timeoutMs
  const raw=await boundedText(r,2000000);
  if(raw.length>5000000)throw new Error('订阅内容过大');
  const items=parseSource(raw,source,checkedAt,fallback);
+ if(source.format==='anthropic'){
+  // Enrich at most two latest official notices; only this fixed public host is allowed.
+  await Promise.all(items.slice(0,2).filter(n=>!n.summary).map(async n=>{
+   if(new URL(n.url).origin!=='https://www.anthropic.com')return;
+   try{const page=await fetch(n.url,{signal:AbortSignal.timeout(4000)});if(page.ok)n.summary=articleDescription(await boundedText(page,1500000))||undefined;}catch{/* Keep original dated title when the article is unavailable. */}
+  }));
+ }
  if(!items.length)throw new Error('订阅有响应，但未解析到带有效日期、正文链接和相关内容的条目');
  return items;
 }

@@ -70,6 +70,14 @@ if(process.env.ATLAS_ACCESS_PASSWORD){
   }));
   console.log('Domestic collection status:',JSON.stringify(domestic.map(({index,name,ok,count,error})=>({index,name,ok,count,error}))));
   must(domestic.some(s=>s.ok&&s.count>0),'no direct domestic sources available from deployed Worker');
+  const international=await Promise.all([42,43,44,62,63].map(async index=>{
+   const r=await request('/api/updates?source='+index,{headers:{Cookie:cookie}}),d=await r.json();
+   must(r.ok&&Array.isArray(d.items)&&d.statuses?.length===1,'international feed contract failed: '+index);
+   return {index,...d.statuses[0],ipo:d.items.filter(n=>/IPO|S-1|public offering/i.test(n.title)).map(n=>({title:n.title,date:n.date,url:n.url}))};
+  }));
+  console.log('International collection status:',JSON.stringify(international.map(({index,name,ok,count,error,ipo})=>({index,name,ok,count,error,ipo}))));
+  must(international.some(s=>s.index>=42&&s.index<=44&&s.ok&&s.count>0),'BBC unavailable from deployed Worker');
+  must(international.some(s=>s.index>=62&&s.ok&&s.count>0),'official company newsroom unavailable from deployed Worker');
   const logout=await request('/auth/logout',{method:'POST',headers:{Origin:origin,Cookie:cookie}});
   must(logout.status===303&&logout.headers.get('set-cookie')?.includes('Max-Age=0'),'logout failed');
  }

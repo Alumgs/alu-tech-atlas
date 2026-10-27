@@ -5,7 +5,7 @@ export type SourceTier = 'primary' | 'media' | 'aggregate' | 'other';
 export const tierLabels: Record<SourceTier, string> = {primary:'一手资料',media:'专业媒体',aggregate:'聚合索引',other:'其他来源'};
 // A publisher label alone must not promote an unknown website to an official source.
 const primaryRoots=['nvidia.com','arxiv.org','iea.org','abb.com','serverobotics.com','huawei.com','openai.com','anthropic.com','deepmind.google','research.google','ai.meta.com','huggingface.co','baai.ac.cn','gov.cn','bytedance.com','unitree.com','ubtrobot.com','qwen.ai','un.org','federalreserve.gov','imf.org','worldbank.org'];
-const mediaRoots=['techcrunch.com','datacenterdynamics.com','therobotreport.com','venturebeat.com','infoq.cn','qbitai.com','ieee.org','acm.org','nature.com','science.org','bbc.co.uk','bbc.com','chinanews.com.cn','10jqka.com.cn'];
+const mediaRoots=['techcrunch.com','datacenterdynamics.com','therobotreport.com','venturebeat.com','infoq.cn','qbitai.com','ieee.org','acm.org','nature.com','science.org','bbc.co.uk','bbc.com','chinanews.com.cn','10jqka.com.cn','theverge.com'];
 const matches=(host:string,root:string)=>host===root||host.endsWith('.'+root);
 export function sourceTier(n:News):SourceTier{
  const host=publicUrl(n.url)?.hostname||'';
@@ -18,7 +18,7 @@ export function scoreNews(n:News,now=Date.now()):number{
  const time=Date.parse(n.date),age=(now-time)/86400000;
  if(!canonicalUrl(n.url)||!Number.isFinite(time)||time>now+300000)return 0;
  const recency=Math.round(28*Math.exp(-Math.max(0,age)/24));
- const types:Record<string,number>={'研究论文':24,'技术研究':23,'企业财报':22,'产品发布':20,'市场洞察':15,'政策法规':21,'行业活动':8};
+ const types:Record<string,number>={'研究论文':24,'技术研究':23,'企业财报':22,'产品发布':20,'市场洞察':15,'政策法规':21,'行业活动':8,'国际时事':20,'科技与科学':20,'社会与公共政策':20};
  const source={primary:25,media:17,aggregate:7,other:10}[sourceTier(n)];
  const length=(n.summary||'').trim().length;
  const completeness=length>=120?11:length>=60?8:length>=25?4:0;
