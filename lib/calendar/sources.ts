@@ -1,7 +1,7 @@
 import type {CalendarSource} from './types';
 export const calendarSources:CalendarSource[]=[
  {id:'nbs',name:'国家统计局',url:'https://www.stats.gov.cn/sj/fbrc/bnxxfb/',parser:'nbs',category:'macro',region:'中国',country:'中国',timezone:'Asia/Shanghai',level:'official',note:'年度统计信息发布日程；日期为初步计划，可能调整。'},
- {id:'bls',name:'美国劳工统计局 BLS',url:'https://www.bls.gov/schedule/news_release/bls.ics',parser:'ics',category:'macro',region:'美洲',country:'美国',timezone:'America/New_York',level:'official',note:'官方 iCalendar：CPI、就业、PPI 等。'},
+ {id:'bls',name:'美国劳工统计局 BLS',url:'https://www.bls.gov/schedule/news_release/bls.ics',parser:'ics',category:'macro',region:'美洲',country:'美国',timezone:'America/New_York',level:'official',note:'官方 iCalendar：CPI、就业、PPI 等；云端直连受限时，独立定时任务同步原站日历。'},
  {id:'bea',name:'美国经济分析局 BEA',url:'https://www.bea.gov/news/schedule',parser:'bea',category:'macro',region:'美洲',country:'美国',timezone:'America/New_York',level:'official',note:'GDP、个人收入及支出等官方排期。'},
  {id:'eurostat',name:'欧盟统计局 Eurostat',url:'https://ec.europa.eu/eurostat/news/release-calendar',parser:'eurostat',category:'macro',region:'欧洲',country:'欧盟',timezone:'Europe/Luxembourg',level:'official',note:'欧盟主要经济指标发布日历。'},
  {id:'fed',name:'美联储 FOMC',url:'https://www.federalreserve.gov/monetarypolicy/fomccalendars.htm',parser:'fed',category:'central-bank',region:'美洲',country:'美国',timezone:'America/New_York',level:'official',note:'官方会议安排与已公布的声明、会议纪要链接。'},

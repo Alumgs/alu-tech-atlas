@@ -16,7 +16,7 @@ for(const path of ['/','/calendar','/settings','/case-study','/read/a04','/aidc.
  const r=await request(path);
  must(r.status===302&&r.headers.get('location')?.startsWith('/auth/login'),'anonymous path is not protected: '+path);
 }
-for(const path of ['/api/calendar','/api/updates?source=0','/api/indicators','/api/admin/settings','/api/translate']){
+for(const path of ['/api/calendar','/api/calendar/import','/api/updates?source=0','/api/indicators','/api/admin/settings','/api/translate']){
  must((await request(path)).status===401,'anonymous API not protected: '+path);
 }
 const csrf=await request('/auth/login',{method:'POST',headers:{Origin:'https://invalid.example','Content-Type':'application/x-www-form-urlencoded'},body:'password=invalid'});
@@ -78,6 +78,8 @@ if(process.env.ATLAS_ACCESS_PASSWORD){
   console.log('International collection status:',JSON.stringify(international.map(({index,name,ok,count,error,ipo})=>({index,name,ok,count,error,ipo}))));
   must(international.some(s=>s.index>=42&&s.index<=44&&s.ok&&s.count>0),'BBC unavailable from deployed Worker');
   must(international.some(s=>s.index>=62&&s.ok&&s.count>0),'official company newsroom unavailable from deployed Worker');
+  const importNoConfirmation=await request('/api/calendar/import',{method:'POST',headers:{Cookie:cookie,Origin:origin,'Content-Type':'application/json'},body:JSON.stringify({source:'bls',raw:'BEGIN:VCALENDAR'})});
+  must(importNoConfirmation.status===403,'calendar snapshot import accepted without administrator password');
   const calendarPage=await request('/calendar',{headers:{Cookie:cookie}});
   must(calendarPage.ok&&(await calendarPage.text()).includes('环球日历'),'calendar page failed');
   for(const sources of [['nbs','bls','bea'],['fed','ecb','elections'],['nvidia','microsoft','eurostat'],['boe','boj','meta'],['amazon','amd']]){

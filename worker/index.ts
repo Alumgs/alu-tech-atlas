@@ -1,4 +1,4 @@
-import {calendarApi,scheduledCalendar} from './calendar/index';
+import {calendarApi,scheduledCalendar,importBlsSnapshot} from './calendar/index';
 import handler from 'vinext/server/fetch-handler';
 import {translateText} from './translate';
 import {configured,verifyPassword,hashPassword,issueSession,validSession,getCookie,sessionCookie,sameOrigin,safeReturn,type AuthEnv} from './auth';
@@ -128,6 +128,19 @@ export default {
    if(path.startsWith('/api/admin/')){
     const limited=await env.FEED_LIMITER.limit({key:'atlas-admin:'+getCookie(request).slice(0,48)});
     result=limited.success?await adminApi(request,env,authEnv):json({error:'请求频率过高，请稍后重试。'},429,{'Retry-After':'60'});
+   }else if(path==='/api/calendar/import'){
+    const allowed=await env.LOGIN_LIMITER.limit({key:'calendar-admin-import:'+getCookie(request).slice(0,48)});
+    if(request.method!=='POST')result=json({error:'仅支持 POST。'},405);
+    else if(!allowed.success)result=json({error:'操作过于频繁。'},429);
+    else if(!env.CALENDAR_DB)result=json({error:'日历存储未配置。'},503);
+    else {
+     try{
+      const body=await boundedJson(request,1000000);
+      if(typeof body.currentPassword!=='string'||!await verifyPassword(body.currentPassword,authEnv.ATLAS_PASSWORD_HASH||''))result=json({error:'需要验证当前管理员密码。'},403);
+      else if(body.source!=='bls'||typeof body.raw!=='string')result=json({error:'仅支持官方 BLS 日历快照。'},400);
+      else result=json(await importBlsSnapshot(env.CALENDAR_DB,body.raw));
+     }catch(e){result=json({error:e instanceof RequestError?e.message:'快照同步失败。'},e instanceof RequestError?e.status:503);}
+    }
    }else if(path==='/api/calendar'||path==='/api/calendar/refresh'||path==='/api/calendar/check'){
     const limited=await env.FEED_LIMITER.limit({key:'atlas-calendar:'+getCookie(request).slice(0,48)});
     result=limited.success?await calendarApi(request,env):json({error:'日历请求过于频繁，请稍后重试。'},429);

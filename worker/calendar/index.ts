@@ -10,9 +10,14 @@ export type CalendarEnv={CALENDAR_DB?:WorkerBindings['CALENDAR_DB']};
 async function sourceText(url:string,allowed:string[]){
  const target=new URL(url);if(!allowed.includes(target.origin)||target.protocol!=='https:')throw Error('来源地址不在允许范围');
  const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),9000);
- try{const r=await fetch(target,{redirect:'manual',signal:controller.signal,headers:{'User-Agent':'Mozilla/5.0 (compatible; AtlasCalendar/1.0; public schedules)','Accept':'text/html,application/json,text/calendar,application/rss+xml;q=0.9'}});
-  if(r.status>=300&&r.status<400){const next=new URL(r.headers.get('Location')||'',target);if(next.origin!==target.origin)throw Error('来源重定向到其他站点');const final=await fetch(next,{redirect:'error',signal:controller.signal});if(!final.ok)throw Error('HTTP '+final.status);return await boundedText(final,2500000);}
-  if(!r.ok)throw Error('HTTP '+r.status);return await boundedText(r,2500000);
+ try{
+  let current=target;
+  for(let redirects=0;redirects<4;redirects++){
+   const r=await fetch(current,{redirect:'manual',signal:controller.signal,headers:{'User-Agent':'Mozilla/5.0 (compatible; AtlasCalendar/1.0; public schedules)','Accept':'text/html,application/json,text/calendar,application/rss+xml;q=0.9'}});
+   if(r.status>=300&&r.status<400){const next=new URL(r.headers.get('Location')||'',current);if(next.origin!==target.origin)throw Error('来源重定向到其他站点');current=next;continue;}
+   if(!r.ok)throw Error('HTTP '+r.status);return await boundedText(r,2500000);
+  }
+  throw Error('来源重定向次数过多');
  }finally{clearTimeout(timer);}
 }
 async function enrichQ4(events:CalendarEvent[],source:CalendarSource){
@@ -27,7 +32,13 @@ async function enrichQ4(events:CalendarEvent[],source:CalendarSource){
 async function collect(source:CalendarSource){
  let url=source.url;
  if(source.parser==='eurostat'){const today=beijingDay();url=new URL('/eurostat/o/calendars/eventsJson',source.url).href+'?start='+encodeURIComponent(ARCHIVE_START+'T00:00:00+01:00')+'&end='+encodeURIComponent(addDays(today,90)+'T00:00:00+01:00')+'&isEuroindicator=true';}
- const raw=await sourceText(url,[new URL(source.url).origin]);
+ let raw:string;
+ try{raw=await sourceText(url,[new URL(source.url).origin]);}
+ catch(error){
+  if(source.id!=='bls')throw error;
+  // Public BLS-maintained alternate host, not a third-party proxy.
+  raw=await sourceText('https://blsmon1.bls.gov/schedule/news_release/bls.ics',['https://blsmon1.bls.gov']);
+ }
  let events=parseCalendar(raw,source);
  if(!events.length&&!/<rss\b/i.test(raw))throw Error('未识别到有效日程，需核查源站格式');
  if(source.parser==='q4')await enrichQ4(events,source);
@@ -48,7 +59,16 @@ export async function refreshSources(db:D1Database,ids:string[],force=false){
    const events=await collect(source),changed=await saveEvents(db,events,now);
    await db.prepare('UPDATE calendar_source_state SET attempted_at=?,success_at=?,ok=1,count=?,error=NULL,lease_until=0,lease_owner=NULL WHERE source_id=? AND lease_owner=?').bind(now,now,events.length,id,owner).run();
    console.log(JSON.stringify({event:'calendar_source',id,ok:true,count:events.length,changed}));return {id,ok:true,count:events.length,changed};
-  }catch(error){const message=error instanceof Error?error.message.slice(0,160):'采集失败';await db.prepare('UPDATE calendar_source_state SET attempted_at=?,ok=0,error=?,lease_until=0,lease_owner=NULL WHERE source_id=? AND lease_owner=?').bind(now,message,id,owner).run();console.warn(JSON.stringify({event:'calendar_source',id,ok:false,error:message}));return {id,ok:false,error:message};}
+  }catch(error){
+   if(id==='bls'){
+    const recent=await db.prepare('SELECT success_at,count FROM calendar_source_state WHERE source_id=?').bind(id).first<{success_at:string|null;count:number}>();
+    if(recent?.success_at&&Date.now()-Date.parse(recent.success_at)<3600000){
+     const warning='云端直连受限，使用独立核验任务最近成功同步的官方快照。';
+     await db.prepare('UPDATE calendar_source_state SET attempted_at=?,ok=1,error=?,lease_until=0,lease_owner=NULL WHERE source_id=? AND lease_owner=?').bind(now,warning,id,owner).run();
+     return {id,ok:true,cached:true,count:recent.count,warning};
+    }
+   }
+   const message=error instanceof Error?error.message.slice(0,160):'采集失败';await db.prepare('UPDATE calendar_source_state SET attempted_at=?,ok=0,error=?,lease_until=0,lease_owner=NULL WHERE source_id=? AND lease_owner=?').bind(now,message,id,owner).run();console.warn(JSON.stringify({event:'calendar_source',id,ok:false,error:message}));return {id,ok:false,error:message};}
  }));
 }
 const json=(data:unknown,status=200)=>Response.json(data,{status,headers:{'Cache-Control':'private, no-store'}});
@@ -95,3 +115,12 @@ export async function calendarApi(request:Request,env:CalendarEnv){
  }catch(error){console.error(JSON.stringify({event:'calendar_api',error:String(error)}));return json({error:error instanceof Error?error.message:'读取日历失败。'},url.searchParams.has('month')?400:503);}
 }
 export async function scheduledCalendar(env:CalendarEnv){if(!env.CALENDAR_DB)return;for(let i=0;i<calendarSources.length;i+=3)await refreshSources(env.CALENDAR_DB,calendarSources.slice(i,i+3).map(s=>s.id));}
+
+/** Administrator-confirmed fallback for official BLS snapshots collected by our trusted CI runner. */
+export async function importBlsSnapshot(db:D1Database,raw:string){
+ const source=calendarSources.find(s=>s.id==='bls')!,events=parseCalendar(raw,source);
+ if(!events.length)throw Error('官方日历快照没有有效条目。');
+ const now=new Date().toISOString(),changed=await saveEvents(db,events,now);
+ await db.prepare('INSERT INTO calendar_source_state(source_id,attempted_at,success_at,ok,count,error) VALUES(?,?,?,1,?,NULL) ON CONFLICT(source_id) DO UPDATE SET attempted_at=excluded.attempted_at,success_at=excluded.success_at,ok=1,count=excluded.count,error=NULL').bind('bls',now,now,events.length).run();
+ return {ok:true,count:events.length,changed};
+}
