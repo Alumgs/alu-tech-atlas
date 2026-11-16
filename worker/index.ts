@@ -1,3 +1,4 @@
+import {calendarApi,scheduledCalendar} from './calendar/index';
 import handler from 'vinext/server/fetch-handler';
 import {translateText} from './translate';
 import {configured,verifyPassword,hashPassword,issueSession,validSession,getCookie,sessionCookie,sameOrigin,safeReturn,type AuthEnv} from './auth';
@@ -6,6 +7,7 @@ import {defaultSiteSettings,sanitizeSiteSettings} from '../lib/site-settings';
 import {editorialEnrich,type EditorialEnv} from './editorial';
 import {boundedJson,RequestError} from '../lib/http-safety';
 interface Env extends AuthEnv {
+ CALENDAR_DB?:WorkerBindings['CALENDAR_DB'];
  LOGIN_LIMITER:{limit(options:{key:string}):Promise<{success:boolean}>};
  FEED_LIMITER:{limit(options:{key:string}):Promise<{success:boolean}>};
  EDITORIAL_LIMITER:{limit(options:{key:string}):Promise<{success:boolean}>};
@@ -95,13 +97,14 @@ async function boundedForm(request:Request){
  text+=decoder.decode();return new URLSearchParams(text);
 }
 export default {
+ async scheduled(_controller:ScheduledController,env:Env,ctx:ExecutionContext){ctx.waitUntil(scheduledCalendar(env));},
  async fetch(request:Request,env:Env,ctx:ExecutionContext){
   const url=new URL(request.url),path=url.pathname;
   let result:Response;
   if(!['GET','HEAD'].includes(request.method)&&!sameOrigin(request))return protect(json({error:'请求来源不符。'},403));
   if(path==='/api/health'&&!['GET','HEAD'].includes(request.method))return protect(json({error:'仅支持 GET 或 HEAD。'},405,{Allow:'GET, HEAD'}));
   const authEnv=await effectiveAuthEnv(env);
-  if(path==='/api/health')return protect(Response.json({ok:true,service:'alu-tech-atlas',version:'4.2.0',release:env.ATLAS_RELEASE||'',platform:'cloudflare-workers',authConfigured:configured(authEnv),settingsStorage:Boolean(env.ATLAS_SETTINGS),sessionDays:7}));
+  if(path==='/api/health')return protect(Response.json({ok:true,service:'alu-tech-atlas',version:'4.3.0',release:env.ATLAS_RELEASE||'',platform:'cloudflare-workers',authConfigured:configured(authEnv),settingsStorage:Boolean(env.ATLAS_SETTINGS),calendarStorage:Boolean(env.CALENDAR_DB),sessionDays:7}));
   if(!configured(authEnv))return protect(new Response('网站正在完成访问配置，请稍后再试。',{status:503,headers:{'Content-Type':'text/plain; charset=utf-8'}}));
   if(path==='/auth/login'){
    if(request.method==='GET')result=html('',safeReturn(url.searchParams.get('returnTo')));
@@ -125,6 +128,9 @@ export default {
    if(path.startsWith('/api/admin/')){
     const limited=await env.FEED_LIMITER.limit({key:'atlas-admin:'+getCookie(request).slice(0,48)});
     result=limited.success?await adminApi(request,env,authEnv):json({error:'请求频率过高，请稍后重试。'},429,{'Retry-After':'60'});
+   }else if(path==='/api/calendar'||path==='/api/calendar/refresh'||path==='/api/calendar/check'){
+    const limited=await env.FEED_LIMITER.limit({key:'atlas-calendar:'+getCookie(request).slice(0,48)});
+    result=limited.success?await calendarApi(request,env):json({error:'日历请求过于频繁，请稍后重试。'},429);
    }else if(path==='/api/translate'){
     if(request.method!=='POST')result=json({error:'Only POST supported'},405,{Allow:'POST'});
     else if(!await env.FEED_LIMITER.limit({key:'atlas-translation:'+getCookie(request).slice(0,48)}).then(r=>r.success))result=json({error:'Too many requests'},429);

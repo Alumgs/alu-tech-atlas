@@ -11,12 +11,12 @@ for(let attempt=1;attempt<=6;attempt++){
  if(attempt===6)throw Error('health endpoint invalid: status='+health.status+', content-type='+contentType+', location='+String(health.headers.get('location')));
  await new Promise(r=>setTimeout(r,1500));
 }
-must(info?.ok&&info?.authConfigured&&info?.version==='4.2.0'&&info?.settingsStorage,'health, auth or KV settings configuration failed');
-for(const path of ['/','/settings','/case-study','/read/a04','/aidc.jpg']){
+must(info?.ok&&info?.authConfigured&&info?.version==='4.3.0'&&info?.settingsStorage,'health, auth or KV settings configuration failed');
+for(const path of ['/','/calendar','/settings','/case-study','/read/a04','/aidc.jpg']){
  const r=await request(path);
  must(r.status===302&&r.headers.get('location')?.startsWith('/auth/login'),'anonymous path is not protected: '+path);
 }
-for(const path of ['/api/updates?source=0','/api/indicators','/api/admin/settings','/api/translate']){
+for(const path of ['/api/calendar','/api/updates?source=0','/api/indicators','/api/admin/settings','/api/translate']){
  must((await request(path)).status===401,'anonymous API not protected: '+path);
 }
 const csrf=await request('/auth/login',{method:'POST',headers:{Origin:'https://invalid.example','Content-Type':'application/x-www-form-urlencoded'},body:'password=invalid'});
@@ -78,6 +78,21 @@ if(process.env.ATLAS_ACCESS_PASSWORD){
   console.log('International collection status:',JSON.stringify(international.map(({index,name,ok,count,error,ipo})=>({index,name,ok,count,error,ipo}))));
   must(international.some(s=>s.index>=42&&s.index<=44&&s.ok&&s.count>0),'BBC unavailable from deployed Worker');
   must(international.some(s=>s.index>=62&&s.ok&&s.count>0),'official company newsroom unavailable from deployed Worker');
+  const calendarPage=await request('/calendar',{headers:{Cookie:cookie}});
+  must(calendarPage.ok&&(await calendarPage.text()).includes('环球日历'),'calendar page failed');
+  for(const sources of [['nbs','bls','bea'],['fed','ecb','elections'],['nvidia','microsoft','eurostat'],['boe','boj','meta'],['amazon','amd']]){
+   const r=await request('/api/calendar/refresh',{method:'POST',headers:{Cookie:cookie,Origin:origin,'Content-Type':'application/json'},body:JSON.stringify({sources,force:true}),signal:AbortSignal.timeout(90000)});
+   const d=await r.json();must(r.ok&&Array.isArray(d.results),'calendar refresh contract failed');console.log('Calendar source status:',JSON.stringify(d.results));
+  }
+  const calendar=await request('/api/calendar',{headers:{Cookie:cookie}}),agenda=await calendar.json();
+  must(calendar.ok&&agenda.storage==='cloudflare-d1'&&Array.isArray(agenda.events)&&agenda.events.length>0,'persistent calendar empty or invalid');
+  const windowDays=(Date.parse(agenda.to)-Date.parse(agenda.from))/86400000;
+  must(windowDays===6,'calendar forward range must be seven inclusive days');
+  const archive=await request('/api/calendar?month=2026-11',{headers:{Cookie:cookie}}),history=await archive.json();
+  must(archive.ok&&history.archiveStart==='2026-11-01'&&Array.isArray(history.events),'calendar archive contract failed');
+  const record=await request('/api/calendar?id='+agenda.events[0].id,{headers:{Cookie:cookie}}),recordData=await record.json();
+  must(record.ok&&recordData.versions?.length>0,'calendar revision history missing');
+  console.log('Calendar verified:',JSON.stringify({events:agenda.events.length,archiveEvents:history.events.length,from:agenda.from,to:agenda.to}));
   const logout=await request('/auth/logout',{method:'POST',headers:{Origin:origin,Cookie:cookie}});
   must(logout.status===303&&logout.headers.get('set-cookie')?.includes('Max-Age=0'),'logout failed');
  }

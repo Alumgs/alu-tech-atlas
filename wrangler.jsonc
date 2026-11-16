@@ -1,17 +1,64 @@
 {
- "$schema":"./node_modules/wrangler/config-schema.json",
- "name":"alu-tech-atlas",
- "main":"worker/index.ts",
- "compatibility_date":"2026-05-15",
- "compatibility_flags":["nodejs_compat"],
- "workers_dev":true,
- "preview_urls":false,
- "assets":{"binding":"ASSETS","directory":"./public","run_worker_first":true},
- "ai":{"binding":"AI"},
- "observability":{"enabled":true},
- "ratelimits":[
-  {"name":"LOGIN_LIMITER","namespace_id":"410071","simple":{"limit":8,"period":60}},
-  {"name":"FEED_LIMITER","namespace_id":"410072","simple":{"limit":180,"period":60}},
-  {"name":"EDITORIAL_LIMITER","namespace_id":"410073","simple":{"limit":3,"period":60}}
- ]
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "alu-tech-atlas",
+  "main": "worker/index.ts",
+  "compatibility_date": "2026-05-15",
+  "compatibility_flags": [
+    "nodejs_compat"
+  ],
+  "workers_dev": true,
+  "preview_urls": false,
+  "assets": {
+    "binding": "ASSETS",
+    "directory": "./public",
+    "run_worker_first": true
+  },
+  "ai": {
+    "binding": "AI"
+  },
+  "observability": {
+    "enabled": true,
+    "traces": {
+      "enabled": true
+    }
+  },
+  "ratelimits": [
+    {
+      "name": "LOGIN_LIMITER",
+      "namespace_id": "410071",
+      "simple": {
+        "limit": 8,
+        "period": 60
+      }
+    },
+    {
+      "name": "FEED_LIMITER",
+      "namespace_id": "410072",
+      "simple": {
+        "limit": 180,
+        "period": 60
+      }
+    },
+    {
+      "name": "EDITORIAL_LIMITER",
+      "namespace_id": "410073",
+      "simple": {
+        "limit": 3,
+        "period": 60
+      }
+    }
+  ],
+  "d1_databases": [
+    {
+      "binding": "CALENDAR_DB",
+      "database_name": "atlas-global-calendar",
+      "database_id": "83d93d92-8f4c-4307-8893-0882b43c84a3",
+      "migrations_dir": "migrations"
+    }
+  ],
+  "triggers": {
+    "crons": [
+      "*/30 * * * *"
+    ]
+  }
 }

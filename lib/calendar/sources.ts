@@ -1,0 +1,17 @@
+import type {CalendarSource} from './types';
+export const calendarSources:CalendarSource[]=[
+ {id:'nbs',name:'国家统计局',url:'https://www.stats.gov.cn/sj/fbrc/bnxxfb/',parser:'nbs',category:'macro',region:'中国',country:'中国',timezone:'Asia/Shanghai',level:'official',note:'年度统计信息发布日程；日期为初步计划，可能调整。'},
+ {id:'bls',name:'美国劳工统计局 BLS',url:'https://www.bls.gov/schedule/news_release/bls.ics',parser:'ics',category:'macro',region:'美洲',country:'美国',timezone:'America/New_York',level:'official',note:'官方 iCalendar：CPI、就业、PPI 等。'},
+ {id:'bea',name:'美国经济分析局 BEA',url:'https://www.bea.gov/news/schedule',parser:'bea',category:'macro',region:'美洲',country:'美国',timezone:'America/New_York',level:'official',note:'GDP、个人收入及支出等官方排期。'},
+ {id:'eurostat',name:'欧盟统计局 Eurostat',url:'https://ec.europa.eu/eurostat/news/release-calendar',parser:'eurostat',category:'macro',region:'欧洲',country:'欧盟',timezone:'Europe/Luxembourg',level:'official',note:'欧盟主要经济指标发布日历。'},
+ {id:'fed',name:'美联储 FOMC',url:'https://www.federalreserve.gov/monetarypolicy/fomccalendars.htm',parser:'fed',category:'central-bank',region:'美洲',country:'美国',timezone:'America/New_York',level:'official',note:'官方会议安排与已公布的声明、会议纪要链接。'},
+ {id:'ecb',name:'欧洲央行 ECB',url:'https://www.ecb.europa.eu/press/calendars/mgcgc/html/index.en.html',parser:'ecb',category:'central-bank',region:'欧洲',country:'欧元区',timezone:'Europe/Berlin',level:'official',note:'区分货币政策会议与非货币政策会议。'},
+ {id:'boe',name:'英国央行 BoE',url:'https://www.bankofengland.co.uk/monetary-policy/upcoming-mpc-dates',parser:'boe',category:'central-bank',region:'欧洲',country:'英国',timezone:'Europe/London',level:'official',note:'货币政策委员会官方日程；只有日期时不推定时刻。'},
+ {id:'boj',name:'日本银行 BoJ',url:'https://www.boj.or.jp/en/mopo/mpmsche_minu/index.htm',parser:'boj',category:'central-bank',region:'亚太',country:'日本',timezone:'Asia/Tokyo',level:'official',note:'货币政策会议安排与公布资料。'},
+ {id:'elections',name:'IFES ElectionGuide',url:'https://www.electionguide.org/elections/',parser:'elections',category:'politics',region:'全球',country:'全球',timezone:'当地时间',level:'institutional',note:'机构日历，非各国选举机关；暂定日期明确标注，结果需官方认证。'},
+ {id:'nvidia',name:'NVIDIA 投资者关系',url:'https://investor.nvidia.com/rss/Event.aspx?LanguageId=1',parser:'q4',category:'earnings',region:'美洲',country:'美国',timezone:'America/Los_Angeles',level:'official',note:'官方活动订阅；财报公告与电话会分开，绝不把 RSS 发布日期作为活动日期。'},
+ {id:'microsoft',name:'Microsoft 投资者关系',url:'https://www.microsoft.com/en-us/Investor/events/default.aspx',parser:'microsoft',category:'earnings',region:'美洲',country:'美国',timezone:'America/Los_Angeles',level:'official',note:'官方财报与投资者活动，采用页面提供的 UTC 时间。'},
+ {id:'meta',name:'Meta 投资者关系',url:'https://investor.atmeta.com/rss/Event.aspx?LanguageId=1',parser:'q4',category:'earnings',region:'美洲',country:'美国',timezone:'America/Los_Angeles',level:'official',note:'官方投资者活动订阅。'},
+ {id:'amazon',name:'Amazon 投资者关系',url:'https://ir.aboutamazon.com/rss/Event.aspx?LanguageId=1',parser:'q4',category:'earnings',region:'美洲',country:'美国',timezone:'America/Los_Angeles',level:'official',note:'官方投资者活动订阅，空日历不代表没有未来计划。'},
+ {id:'amd',name:'AMD 投资者关系',url:'https://ir.amd.com/news-events/ir-calendar',parser:'amd',category:'earnings',region:'美洲',country:'美国',timezone:'America/New_York',level:'official',note:'官方活动日程与后续原文入口。'},
+];
