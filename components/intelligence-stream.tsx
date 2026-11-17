@@ -42,6 +42,6 @@ export function IntelligenceStream({scope,domain,domainName,items,updates,loadin
 
 /** Retain each stream's filters and last visible inputs; hidden streams do no feed work. */
 export const RetainedStream=memo(function RetainedStream({active,...incoming}:Parameters<typeof IntelligenceStream>[0]&{active:boolean}){
- const retained=useRef(incoming);if(active)retained.current=incoming;
+ const retained=useRef(incoming);if(active){const old=retained.current.items,items=incoming.items===old||incoming.items.length===old.length&&incoming.items.every((item,index)=>item===old[index])?old:incoming.items;retained.current={...incoming,items};}
  return <section hidden={!active}><IntelligenceStream {...retained.current} active={active}/></section>;
 },(previous,next)=>!previous.active&&!next.active||(Object.keys(next) as Array<keyof typeof next>).every(key=>Object.is(previous[key],next[key])));
