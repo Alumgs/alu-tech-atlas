@@ -49,6 +49,10 @@ try{
  await settings().getByLabel('自动刷新资讯',{exact:false}).uncheck();
  await settings().getByLabel('减少动画',{exact:false}).check();
  await page.keyboard.press('Escape');
+ await page.locator('#stream-news-world .stream-summary>a').click();
+ await page.locator('#source-directory-world').waitFor();
+ const catalogBounds=await page.locator('#source-directory-world').boundingBox();assert.ok(catalogBounds&&catalogBounds.y<900,'Source directory link did not scroll to the expanded directory');
+ await page.locator('#source-directory-panel-world>summary').click();
  const popup=()=>page.locator('.source-picker:visible');
  await page.locator('.source-picker-trigger:visible').click();await popup().waitFor();
  await popup().getByRole('button',{name:'清空',exact:true}).click();
@@ -80,7 +84,7 @@ try{
  assert.equal(await page.evaluate(()=>window.__atlasQaMarker),'same-document');
  // Popover must not remain floating over another retained view.
  await page.locator('.source-picker-trigger:visible').click();await popup().waitFor();await nav.getByRole('button',{name:'环球日历',exact:true}).click();await page.locator('main.view-calendar').waitFor();
- assert.equal(await popup().count(),0,'Source popover survived a view change');
+ await page.locator('.source-picker').waitFor({state:'hidden'});assert.equal(await popup().count(),0,'Source popover survived a view change');
  await nav.getByRole('button',{name:'世界热点',exact:true}).click();
  await page.setViewportSize({width:390,height:844});
  await page.locator('.settings-nav-link').click();await settings().waitFor();
@@ -90,11 +94,17 @@ try{
  const sourceBounds=await popup().boundingBox();assert.ok(sourceBounds&&sourceBounds.x>=0&&sourceBounds.x+sourceBounds.width<=391,'Mobile source picker overflows the viewport');
  await page.keyboard.press('Escape');
  assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+2),true,'Mobile page has horizontal overflow');
+ const portalDocumentReloads=documents-initialDocuments;
+ await page.setViewportSize({width:1440,height:900});await page.goto('/?domain=aidc&view=library',{waitUntil:'networkidle'});
+ await page.locator('.wiki-entry h2 a').first().waitFor();const libraryDocuments=documents;await page.evaluate(()=>window.__atlasArticleMarker='client-route');
+ await page.locator('.wiki-entry h2 a').first().click();await page.waitForURL(/\/read\//);await page.locator('main.reading h1').waitFor();
+ assert.equal(documents,libraryDocuments,'Article link performed a document reload');assert.equal(await page.evaluate(()=>window.__atlasArticleMarker),'client-route');
+ await page.locator('.read-header a').filter({hasText:'返回知识手册'}).click();await page.locator('main.view-library').waitFor();assert.equal(documents,libraryDocuments,'Returning from an article reloaded the document');
  assert.equal(translations,0,'Translation-off preference still issued translation requests');
  assert.equal(feedRequests,0,'Disabled background refresh fetched feeds despite an available cached snapshot');
  assert.deepEqual(errors,[],'Browser runtime errors');
- const timing={};for(const target of ['calendar','world']){const values=samples.filter(sample=>sample.target===target).map(sample=>sample.ms).sort((a,b)=>a-b);timing[target]={medianMs:values[Math.floor(values.length/2)],maxMs:Math.max(...values),samples:values};}
- console.log('Browser interaction verified:',JSON.stringify({browser:'headless Chromium',viewport:'1440x900; mobile 390x844',liveReports:snapshot.items.length,sourceSelection:'two feeds, cancel and round-trip retention',settings:'dialog, Escape, persisted style controls',documentReloads:documents-initialDocuments,translationRequests:translations,backgroundFeedRequests:feedRequests,warmNavigation:timing}));
+ const timing={};for(const target of ['calendar','world']){const values=samples.filter(sample=>sample.target===target).map(sample=>sample.ms).sort((a,b)=>a-b);timing[target]={medianMs:Math.round((values[Math.floor((values.length-1)/2)]+values[Math.floor(values.length/2)])/2),maxMs:Math.max(...values),samples:values};}
+ console.log('Browser interaction verified:',JSON.stringify({browser:'headless Chromium',viewport:'1440x900; mobile 390x844',liveReports:snapshot.items.length,sourceSelection:'two feeds, cancel and round-trip retention',settings:'dialog, Escape, persisted style controls',portalDocumentReloads,articleDocumentReloads:documents-libraryDocuments,translationRequests:translations,backgroundFeedRequests:feedRequests,warmNavigation:timing}));
 }finally{
  await context.request.post('/auth/logout',{headers:{Origin:origin}}).catch(()=>{});
  await context.close();await browser.close();
