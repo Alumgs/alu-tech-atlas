@@ -26,7 +26,7 @@ import {dedupeStories} from '@/lib/editorial';
 import {publicationLabel} from '@/lib/publication-time';
 import {sanitizeSiteSettings} from '@/lib/site-settings';
 import {defaultSiteSettings,type SiteSettings} from '@/lib/site-settings';
-type View='overview'|'library'|'news'|'companies'|'cases'|'research'|'world'|'calendar';
+import {portalRoute,type PortalView as View} from '@/lib/portal-navigation';
 type Result={items:News[];statuses:{name:string;ok:boolean;count:number;error?:string;warning?:string;fallback?:boolean;checkedAt:string;latestPublishedAt?:string;durationMs?:number}[];checkedAt:string;cached?:boolean};
 const views:{key:View;title:string}[]=[{key:'world',title:'世界热点'},{key:'calendar',title:'环球日历'},{key:'overview',title:'领域总览'},{key:'library',title:'知识手册'},{key:'news',title:'产业动态'},{key:'companies',title:'企业观察'},{key:'cases',title:'案例研习'},{key:'research',title:'研报中心'}];
 const icons=[Layers3,Zap,Snowflake,Cpu,Network,Activity,BookOpen,Bot];
@@ -34,14 +34,14 @@ const topCompanyRanks:Record<Domain,Record<string,number>>={aidc:{'NVIDIA':1,'AM
 function companyRank(domain:Domain,name:string){return topCompanyRanks[domain]?.[name]??99;}
 function inAgeWindow(value:string,age:string,now=Date.now()){const time=Date.parse(value);if(!Number.isFinite(time))return false;if(age==='archive')return true;if(age==='today'){const key=new Date(now).toLocaleDateString('en-CA',{timeZone:'Asia/Shanghai'});const start=Date.parse(key+'T00:00:00+08:00');return time>=start&&time<start+86400000;}const days=Number(age);return Number.isFinite(days)&&time>=now-days*86400000&&time<=now+300000;}
 function date(s:string){return s?new Date(s).toLocaleDateString('zh-CN',{year:'numeric',month:'2-digit',day:'2-digit'}):'日期未提供';}
-export default function Portal(){
+export default function Portal({initialView='overview',initialDomain='aidc'}:{initialView?:View;initialDomain?:Domain}){
  const {t,language}=useLanguage();
  const [mobileMenu,setMobileMenu]=useState(false);
  const [filtersOpen,setFiltersOpen]=useState(true);const [workbenchOpen,setWorkbenchOpen]=useState(true);
  useEffect(()=>{const media=window.matchMedia('(max-width: 600px)');const sync=()=>setFiltersOpen(!media.matches);sync();media.addEventListener('change',sync);return()=>media.removeEventListener('change',sync);},[]);
  const [region,setRegion]=useState('all');const [newsLimit,setNewsLimit]=useState(24);const [group,setGroup]=useState('全部');const [age,setAge]=useState('30');const [topic,setTopic]=useState('all');const [companyTab,setCompanyTab]=useState('企业概览');
- const [domain,setDomain]=useState<Domain>('aidc');const [view,setView]=useState<View>('overview');const [query,setQuery]=useState('');const [category,setCategory]=useState('全部');const [level,setLevel]=useState('全部');const [newsType,setNewsType]=useState('全部');
- const [viewReady,setViewReady]=useState(false),[calendarVisited,setCalendarVisited]=useState(false);
+ const [domain,setDomain]=useState<Domain>(initialDomain);const [view,setView]=useState<View>(initialView);const [query,setQuery]=useState('');const [category,setCategory]=useState('全部');const [level,setLevel]=useState('全部');const [newsType,setNewsType]=useState('全部');
+ const [viewReady,setViewReady]=useState(false),[calendarVisited,setCalendarVisited]=useState(initialView==='calendar');
  const {data,loading,progress,added,error,isOld,refresh}=useUpdates(domain,viewReady&&view!=='calendar');
  const isWorldView=view==='world'||view==='calendar';
  useEffect(()=>{if(view==='calendar')setCalendarVisited(true);},[view]);
@@ -59,7 +59,7 @@ export default function Portal(){
   metricRequest.current=fetch('/api/indicators'+(force?'?force=1':''),{signal:AbortSignal.timeout(14000)}).then(r=>{if(!r.ok)throw Error();return r.json() as Promise<Indicators>;}).then(d=>{setIndicators(d);return d;}).catch(()=>{const d:Indicators={checkedAt:new Date().toISOString(),indicators:[],models:[],statuses:[{name:'数据服务',ok:false,error:'请求失败，请重试'}]};setIndicators(d);return d;}).finally(()=>{setMetricLoading(false);metricRequest.current=null;});return metricRequest.current!;
  },[]);
  useEffect(()=>{if(view!=='research')return;const check=()=>{if(document.visibilityState==='visible'&&(!indicators||Date.now()-Date.parse(indicators.checkedAt)>3600000))void loadMetrics();};check();const timer=setInterval(check,60000);return()=>clearInterval(timer);},[view,indicators,loadMetrics]);
- useEffect(()=>{const sync=()=>{const p=new URLSearchParams(location.search);setDomain(['aidc','robot','ml'].includes(p.get('domain')||'')?p.get('domain') as Domain:'aidc');const v=p.get('view');setView(views.some(x=>x.key===v)?v as View:window.matchMedia('(max-width: 600px)').matches?'news':'overview');setTopic(p.get('topic')==='world'?'world':'all');setViewReady(true);};sync();setToday(new Date().toLocaleDateString('zh-CN',{year:'numeric',month:'long',day:'numeric',weekday:'long',timeZone:'Asia/Shanghai'}));window.addEventListener('popstate',sync);return()=>window.removeEventListener('popstate',sync);},[]);
+ useEffect(()=>{const sync=()=>{const p=new URLSearchParams(location.search);const route=portalRoute(p.get('view'),p.get('domain'),window.matchMedia('(max-width: 600px)').matches?'news':'overview');setDomain(route.domain);setView(route.view);setTopic(p.get('topic')==='world'?'world':'all');setViewReady(true);};sync();setToday(new Date().toLocaleDateString('zh-CN',{year:'numeric',month:'long',day:'numeric',weekday:'long',timeZone:'Asia/Shanghai'}));window.addEventListener('popstate',sync);return()=>window.removeEventListener('popstate',sync);},[]);
 
  const viewScroll=useRef<Partial<Record<View,number>>>({});
  function navigate(v:View,d:Domain=domain){
