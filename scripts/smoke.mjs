@@ -80,14 +80,12 @@ if(process.env.ATLAS_ACCESS_PASSWORD){
   must(international.some(s=>s.index>=62&&s.ok&&s.count>0),'official company newsroom unavailable from deployed Worker');
   const importNoConfirmation=await request('/api/calendar/import',{method:'POST',headers:{Cookie:cookie,Origin:origin,'Content-Type':'application/json'},body:JSON.stringify({source:'bls',raw:'BEGIN:VCALENDAR'})});
   must(importNoConfirmation.status===403,'calendar snapshot import accepted without administrator password');
-  const euNoConfirmation=await request('/api/calendar/import',{method:'POST',headers:{Cookie:cookie,Origin:origin,'Content-Type':'application/json'},body:JSON.stringify({source:'eu-council',raw:'<html>'})});
-  must(euNoConfirmation.status===403,'EU snapshot import accepted without administrator password');
   const calendarPage=await request('/calendar',{headers:{Cookie:cookie}});
   must([302,303,307,308].includes(calendarPage.status)&&calendarPage.headers.get('location')?.includes('view=calendar'),'legacy calendar must redirect into the portal');
   const calendarPortal=await request('/?domain=aidc&view=calendar',{headers:{Cookie:cookie}});
   const calendarHtml=await calendarPortal.text();
   must(calendarPortal.ok&&calendarHtml.includes('gc-titlebar')&&!calendarHtml.includes('class="gc-hero"'),'compact calendar first render failed');
-  for(const sources of [['nbs','bls','bea'],['fed','ecb','elections'],['nvidia','microsoft','eurostat'],['boe','boj','meta'],['amazon','amd'],['jd','netease','baidu'],['pdd','alibaba','tencent'],['apec','gov-policy','lpr'],['nato-pa','eu-council']]){
+  for(const sources of [['nbs','bls','bea'],['fed','ecb','elections'],['nvidia','microsoft','eurostat'],['boe','boj','meta'],['amazon','amd'],['jd','netease','baidu'],['pdd','alibaba','tencent'],['apec','gov-policy','lpr'],['nato-pa']]){
    const r=await request('/api/calendar/refresh',{method:'POST',headers:{Cookie:cookie,Origin:origin,'Content-Type':'application/json'},body:JSON.stringify({sources,force:true}),signal:AbortSignal.timeout(90000)});
    const d=await r.json();must(r.ok&&Array.isArray(d.results),'calendar refresh contract failed');console.log('Calendar source status:',JSON.stringify(d.results));
   }
@@ -97,7 +95,7 @@ if(process.env.ATLAS_ACCESS_PASSWORD){
   must(windowDays===6,'calendar forward range must be seven inclusive days');
   must(Array.isArray(agenda.coverage)&&agenda.coverage.length===7,'daily coverage missing');
   must(agenda.events.every((e,i,all)=>all.findIndex(x=>x.country===e.country&&x.day===e.day&&x.startAt===e.startAt&&x.title===e.title)===i),'duplicate calendar cards remain');
-  must(agenda.events.some(e=>e.sourceId==='nato-pa')&&agenda.events.some(e=>e.sourceId==='eu-council'),'official political schedule expansion missing');
+  must(agenda.events.some(e=>e.sourceId==='nato-pa'),'official political schedule expansion missing');
   console.log('Calendar daily coverage:',JSON.stringify(agenda.coverage));
   if(agenda.from==='2026-11-17')must(agenda.coverage.every(d=>d.total>0),'current seven-day window must have verified daily coverage');
   const archive=await request('/api/calendar?month=2026-11',{headers:{Cookie:cookie}}),history=await archive.json();

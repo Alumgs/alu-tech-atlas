@@ -21,9 +21,8 @@ test('report and call share a card without losing call precision or revision IDs
 });
 test('official multi-day political meetings cover weekends as ongoing events, not new starts',()=>{
  const nato=parseCalendar('<a href="/content/annual-session-berlin-november-20-23-2026">Annual Session | Berlin | November 20-23, 2026</a>',source('nato-pa'));
- const eu=parseCalendar('<a href="/en/meetings/epsco/2026/11/22-23/"><span class="gsc-excerpt-item__title gsc-heading--xsm">Informal meeting of gender equality ministers, 22-23 November 2026</span></a>',source('eu-council'));
- assert.equal(nato[0].day,'2026-11-20');assert.equal(nato[0].endDay,'2026-11-23');assert.equal(eu[0].day,'2026-11-22');assert.equal(eu[0].endDay,'2026-11-23');
+ assert.equal(nato[0].day,'2026-11-20');assert.equal(nato[0].endDay,'2026-11-23');
  assert.equal(eventsOnDay(nato,'2026-11-21').length,1);assert.equal(eventsOnDay(nato,'2026-11-24').length,0);
- assert.equal(eventsOnDay([...nato,...eu],'2026-11-22').length,2);assert.equal(eventsOnDay([...nato,...eu],'2026-11-22')[0].day,'2026-11-22');
+ const fresh={...nato[0],id:'new-meeting',day:'2026-11-22',endDay:'2026-11-23'};assert.equal(eventsOnDay([...nato,fresh],'2026-11-22').length,2);assert.equal(eventsOnDay([...nato,fresh],'2026-11-22')[0].day,'2026-11-22');
  assert.equal(parseCalendar('<a href="/content/summit-2026">Summit 2026, date TBC</a>',source('nato-pa')).length,0);
 });

@@ -180,17 +180,9 @@ function nato(raw:string,source:CalendarSource){
   const url=new URL(m[1],source.url).href,e=base(source,url,'北约议会大会 / '+title,day,'',url);e.endDay=end;e.importance='major';e.summary=source.note+' '+title;return [e];
  });
 }
-function euCouncil(raw:string,source:CalendarSource){
- return [...raw.matchAll(/<a\b[^>]*href="(\/en\/meetings\/[a-z-]+\/(20\d{2})\/(\d{2})\/(\d{2})(?:-(\d{2}))?\/)"[^>]*>([\s\S]*?)<\/a>/gi)].flatMap(m=>{
-  const title=clean(m[6].match(/class="[^"]*gsc-excerpt-item__title[^"]*"[^>]*>([\s\S]*?)<\/span>/i)?.[1]||'');if(!title)return [];
-  const day=`${m[2]}-${m[3]}-${m[4]}`,end=m[5]?`${m[2]}-${m[3]}-${m[5]}`:day;if(!validDay(day)||!validDay(end)||end<day)return [];
-  const url=new URL(m[1],source.url).href,e=base(source,m[1],title,day,'',url);if(end!==day)e.endDay=end;e.importance=/European Council|Economic and Financial|Foreign Affairs|summit/i.test(title)?'major':'normal';
-  if(/to be confirmed|\bTBC\b/i.test(title)){e.certainty='tentative';e.status='tentative';}return [e];
- });
-}
 export function parseCalendar(raw:string,source:CalendarSource):CalendarEvent[]{
  let events:CalendarEvent[]=[];
- switch(source.parser){case 'nato':events=nato(raw,source);break;case 'eu-council':events=euCouncil(raw,source);break;case 'lpr':events=lprWindow(raw,source);break;case 'china-ir':events=chinaIr(raw,source);break;case 'alibaba':events=alibaba(raw,source);break;case 'tencent':events=tencent(raw,source);break;case 'apec':events=apec(raw,source);break;case 'gov-policy':events=governmentPolicy(raw,source);break;case 'ics':events=ics(raw,source);break;case 'nbs':events=nbs(raw,source);break;case 'bea':events=bea(raw,source);break;case 'fed':events=fed(raw,source);break;case 'ecb':events=ecb(raw,source);break;case 'elections':events=elections(raw,source);break;case 'microsoft':events=microsoft(raw,source);break;case 'eurostat':events=eurostat(raw,source);break;case 'q4':events=q4(raw,source);break;case 'boe':events=boe(raw,source);break;case 'boj':events=boj(raw,source);break;case 'amd':events=amd(raw,source);break;default:throw Error('该来源需专用活动适配器');}
+ switch(source.parser){case 'nato':events=nato(raw,source);break;case 'lpr':events=lprWindow(raw,source);break;case 'china-ir':events=chinaIr(raw,source);break;case 'alibaba':events=alibaba(raw,source);break;case 'tencent':events=tencent(raw,source);break;case 'apec':events=apec(raw,source);break;case 'gov-policy':events=governmentPolicy(raw,source);break;case 'ics':events=ics(raw,source);break;case 'nbs':events=nbs(raw,source);break;case 'bea':events=bea(raw,source);break;case 'fed':events=fed(raw,source);break;case 'ecb':events=ecb(raw,source);break;case 'elections':events=elections(raw,source);break;case 'microsoft':events=microsoft(raw,source);break;case 'eurostat':events=eurostat(raw,source);break;case 'q4':events=q4(raw,source);break;case 'boe':events=boe(raw,source);break;case 'boj':events=boj(raw,source);break;case 'amd':events=amd(raw,source);break;default:throw Error('该来源需专用活动适配器');}
  const unique=new Map<string,CalendarEvent>();for(const e of events){if(e.day>=ARCHIVE_START&&e.title&&publicUrl(e.url)){if(source.parser!=='china-ir'||unique.get(e.key)?.status!=='published'||e.status==='published')unique.set(e.key,e);}}return [...unique.values()];
 }
 export {base as calendarEvent};

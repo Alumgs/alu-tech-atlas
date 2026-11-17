@@ -88,13 +88,3 @@ test('LPR rule windows never become official dates or fabricate holiday adjustme
  const e=lprWindow('每月20日（遇节假日顺延）',source('lpr'),'2026-11-17')[0];assert.equal(e.day,'2026-11-20');assert.equal(e.certainty,'tentative');assert.equal(e.status,'tentative');assert.equal(e.startAt,undefined);
  assert.throws(()=>lprWindow('规则已改为不定期公布',source('lpr'),'2026-11-17'));
 });
-
-test('independent official imports accept only allowlisted sources and persist verified schedules',async()=>{
- const {importOfficialSnapshot}=await import('../worker/calendar/index.ts');const {db,sql}=database();
- await assert.rejects(importOfficialSnapshot(db,'unknown','arbitrary payload'),/不支持/);
- const raw='<a href="/en/meetings/epsco/2026/11/22-23/"><span class="gsc-excerpt-item__title">Informal meeting of gender equality ministers</span></a>';
- const result=await importOfficialSnapshot(db,'eu-council',raw);assert.equal(result.count,1);
- assert.equal(sql.prepare('SELECT ok FROM calendar_source_state WHERE source_id=?').get('eu-council')?.ok,1);
- const events=await listEvents(db,'2026-11-21','2026-11-23');assert.equal(events.events.length,1);assert.equal(events.events[0].endDay,'2026-11-23');
- await assert.rejects(importOfficialSnapshot(db,'eu-council','<h1>Blocked</h1>'),/没有有效条目/);sql.close();
-});

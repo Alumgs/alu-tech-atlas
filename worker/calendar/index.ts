@@ -68,7 +68,7 @@ export async function refreshSources(db:D1Database,ids:string[],force=false){
    await db.prepare('UPDATE calendar_source_state SET attempted_at=?,success_at=?,ok=1,count=?,error=NULL,lease_until=0,lease_owner=NULL WHERE source_id=? AND lease_owner=?').bind(now,now,events.length,id,owner).run();
    console.log(JSON.stringify({event:'calendar_source',id,ok:true,count:events.length,changed}));return {id,ok:true,count:events.length,changed};
   }catch(error){
-   if(id==='bls'||id==='eu-council'){
+   if(id==='bls'){
     const recent=await db.prepare('SELECT success_at,count FROM calendar_source_state WHERE source_id=?').bind(id).first<{success_at:string|null;count:number}>();
     if(recent?.success_at&&Date.now()-Date.parse(recent.success_at)<3600000){
      const warning='云端直连受限，使用独立核验任务最近成功同步的官方快照。';
@@ -125,12 +125,11 @@ export async function calendarApi(request:Request,env:CalendarEnv){
 }
 export async function scheduledCalendar(env:CalendarEnv){if(!env.CALENDAR_DB)return;for(let i=0;i<calendarSources.length;i+=3)await refreshSources(env.CALENDAR_DB,calendarSources.slice(i,i+3).map(s=>s.id));}
 
-/** Administrator-confirmed snapshots from allowlisted official publishers, collected by our trusted CI runner. */
-export async function importOfficialSnapshot(db:D1Database,id:string,raw:string){
- if(!['bls','eu-council'].includes(id))throw Error('该来源不支持独立快照同步。');
- const source=calendarSources.find(s=>s.id===id)!,events=parseCalendar(raw,source);
+/** Administrator-confirmed fallback for official BLS snapshots collected by our trusted CI runner. */
+export async function importBlsSnapshot(db:D1Database,raw:string){
+ const source=calendarSources.find(s=>s.id==='bls')!,events=parseCalendar(raw,source);
  if(!events.length)throw Error('官方日历快照没有有效条目。');
  const now=new Date().toISOString(),changed=await saveEvents(db,events,now);
- await db.prepare('INSERT INTO calendar_source_state(source_id,attempted_at,success_at,ok,count,error) VALUES(?,?,?,1,?,NULL) ON CONFLICT(source_id) DO UPDATE SET attempted_at=excluded.attempted_at,success_at=excluded.success_at,ok=1,count=excluded.count,error=NULL').bind(id,now,now,events.length).run();
+ await db.prepare('INSERT INTO calendar_source_state(source_id,attempted_at,success_at,ok,count,error) VALUES(?,?,?,1,?,NULL) ON CONFLICT(source_id) DO UPDATE SET attempted_at=excluded.attempted_at,success_at=excluded.success_at,ok=1,count=excluded.count,error=NULL').bind('bls',now,now,events.length).run();
  return {ok:true,count:events.length,changed};
 }

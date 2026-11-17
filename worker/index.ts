@@ -1,4 +1,4 @@
-import {calendarApi,scheduledCalendar,importOfficialSnapshot} from './calendar/index';
+import {calendarApi,scheduledCalendar,importBlsSnapshot} from './calendar/index';
 import handler from 'vinext/server/fetch-handler';
 import {translateText} from './translate';
 import {configured,verifyPassword,hashPassword,issueSession,validSession,getCookie,sessionCookie,sameOrigin,safeReturn,type AuthEnv} from './auth';
@@ -137,8 +137,8 @@ export default {
      try{
       const body=await boundedJson(request,1000000);
       if(typeof body.currentPassword!=='string'||!await verifyPassword(body.currentPassword,authEnv.ATLAS_PASSWORD_HASH||''))result=json({error:'需要验证当前管理员密码。'},403);
-      else if(typeof body.source!=='string'||!['bls','eu-council'].includes(body.source)||typeof body.raw!=='string')result=json({error:'仅支持获准的官方 BLS 或欧盟理事会日历快照。'},400);
-      else result=json(await importOfficialSnapshot(env.CALENDAR_DB,body.source as string,body.raw));
+      else if(body.source!=='bls'||typeof body.raw!=='string')result=json({error:'仅支持官方 BLS 日历快照。'},400);
+      else result=json(await importBlsSnapshot(env.CALENDAR_DB,body.raw));
      }catch(e){result=json({error:e instanceof RequestError?e.message:'快照同步失败。'},e instanceof RequestError?e.status:503);}
     }
    }else if(path==='/api/calendar'||path==='/api/calendar/refresh'||path==='/api/calendar/check'){

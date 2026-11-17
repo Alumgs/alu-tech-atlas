@@ -10,6 +10,6 @@ export type CalendarEvent={
  relatedEvents?:CalendarEvent[];
  firstSeen?:string;lastChecked?:string;updatedAt?:string;revision?:string;
 };
-export type CalendarSource={id:string;name:string;url:string;parser:'ics'|'nbs'|'bea'|'fed'|'ecb'|'elections'|'q4'|'microsoft'|'eurostat'|'boe'|'boj'|'amd'|'china-ir'|'alibaba'|'tencent'|'apec'|'gov-policy'|'lpr'|'nato'|'eu-council';category:CalendarCategory;region:string;country:string;timezone:string;level:'official'|'institutional';note:string};
+export type CalendarSource={id:string;name:string;url:string;parser:'ics'|'nbs'|'bea'|'fed'|'ecb'|'elections'|'q4'|'microsoft'|'eurostat'|'boe'|'boj'|'amd'|'china-ir'|'alibaba'|'tencent'|'apec'|'gov-policy'|'lpr'|'nato';category:CalendarCategory;region:string;country:string;timezone:string;level:'official'|'institutional';note:string};
 export type SourceState={source_id:string;attempted_at:string|null;success_at:string|null;ok:number;count:number;error:string|null};
 export type CalendarPayload={events:CalendarEvent[];sources:Array<CalendarSource&{state?:SourceState}>;today:string;from:string;to:string;archiveStart:string;storage:string};
