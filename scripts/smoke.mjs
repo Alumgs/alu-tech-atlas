@@ -80,6 +80,8 @@ if(process.env.ATLAS_ACCESS_PASSWORD){
   must(international.some(s=>s.index>=62&&s.ok&&s.count>0),'official company newsroom unavailable from deployed Worker');
   const importNoConfirmation=await request('/api/calendar/import',{method:'POST',headers:{Cookie:cookie,Origin:origin,'Content-Type':'application/json'},body:JSON.stringify({source:'bls',raw:'BEGIN:VCALENDAR'})});
   must(importNoConfirmation.status===403,'calendar snapshot import accepted without administrator password');
+  const euNoConfirmation=await request('/api/calendar/import',{method:'POST',headers:{Cookie:cookie,Origin:origin,'Content-Type':'application/json'},body:JSON.stringify({source:'eu-council',raw:'<html>'})});
+  must(euNoConfirmation.status===403,'EU snapshot import accepted without administrator password');
   const calendarPage=await request('/calendar',{headers:{Cookie:cookie}});
   must([302,303,307,308].includes(calendarPage.status)&&calendarPage.headers.get('location')?.includes('view=calendar'),'legacy calendar must redirect into the portal');
   const calendarPortal=await request('/?domain=aidc&view=calendar',{headers:{Cookie:cookie}});
