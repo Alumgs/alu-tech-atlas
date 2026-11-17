@@ -104,7 +104,7 @@ export default {
   if(!['GET','HEAD'].includes(request.method)&&!sameOrigin(request))return protect(json({error:'请求来源不符。'},403));
   if(path==='/api/health'&&!['GET','HEAD'].includes(request.method))return protect(json({error:'仅支持 GET 或 HEAD。'},405,{Allow:'GET, HEAD'}));
   const authEnv=await effectiveAuthEnv(env);
-  if(path==='/api/health')return protect(Response.json({ok:true,service:'alu-tech-atlas',version:'4.3.0',release:env.ATLAS_RELEASE||'',platform:'cloudflare-workers',authConfigured:configured(authEnv),settingsStorage:Boolean(env.ATLAS_SETTINGS),calendarStorage:Boolean(env.CALENDAR_DB),sessionDays:7}));
+  if(path==='/api/health')return protect(Response.json({ok:true,service:'alu-tech-atlas',version:'4.3.1',release:env.ATLAS_RELEASE||'',platform:'cloudflare-workers',authConfigured:configured(authEnv),settingsStorage:Boolean(env.ATLAS_SETTINGS),calendarStorage:Boolean(env.CALENDAR_DB),sessionDays:7}));
   if(!configured(authEnv))return protect(new Response('网站正在完成访问配置，请稍后再试。',{status:503,headers:{'Content-Type':'text/plain; charset=utf-8'}}));
   if(path==='/auth/login'){
    if(request.method==='GET')result=html('',safeReturn(url.searchParams.get('returnTo')));

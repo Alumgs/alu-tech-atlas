@@ -11,7 +11,7 @@ for(let attempt=1;attempt<=6;attempt++){
  if(attempt===6)throw Error('health endpoint invalid: status='+health.status+', content-type='+contentType+', location='+String(health.headers.get('location')));
  await new Promise(r=>setTimeout(r,1500));
 }
-must(info?.ok&&info?.authConfigured&&info?.version==='4.3.0'&&info?.settingsStorage,'health, auth or KV settings configuration failed');
+must(info?.ok&&info?.authConfigured&&info?.version==='4.3.1'&&info?.settingsStorage,'health, auth or KV settings configuration failed');
 for(const path of ['/','/calendar','/settings','/case-study','/read/a04','/aidc.jpg']){
  const r=await request(path);
  must(r.status===302&&r.headers.get('location')?.startsWith('/auth/login'),'anonymous path is not protected: '+path);
@@ -81,8 +81,10 @@ if(process.env.ATLAS_ACCESS_PASSWORD){
   const importNoConfirmation=await request('/api/calendar/import',{method:'POST',headers:{Cookie:cookie,Origin:origin,'Content-Type':'application/json'},body:JSON.stringify({source:'bls',raw:'BEGIN:VCALENDAR'})});
   must(importNoConfirmation.status===403,'calendar snapshot import accepted without administrator password');
   const calendarPage=await request('/calendar',{headers:{Cookie:cookie}});
-  must(calendarPage.ok&&(await calendarPage.text()).includes('环球日历'),'calendar page failed');
-  for(const sources of [['nbs','bls','bea'],['fed','ecb','elections'],['nvidia','microsoft','eurostat'],['boe','boj','meta'],['amazon','amd']]){
+  must([302,303,307,308].includes(calendarPage.status)&&calendarPage.headers.get('location')?.includes('view=calendar'),'legacy calendar must redirect into the portal');
+  const calendarPortal=await request('/?domain=aidc&view=calendar',{headers:{Cookie:cookie}});
+  must(calendarPortal.ok&&(await calendarPortal.text()).includes('环球日历'),'embedded calendar portal failed');
+  for(const sources of [['nbs','bls','bea'],['fed','ecb','elections'],['nvidia','microsoft','eurostat'],['boe','boj','meta'],['amazon','amd'],['jd','netease','baidu'],['pdd','alibaba','tencent'],['apec','gov-policy','lpr']]){
    const r=await request('/api/calendar/refresh',{method:'POST',headers:{Cookie:cookie,Origin:origin,'Content-Type':'application/json'},body:JSON.stringify({sources,force:true}),signal:AbortSignal.timeout(90000)});
    const d=await r.json();must(r.ok&&Array.isArray(d.results),'calendar refresh contract failed');console.log('Calendar source status:',JSON.stringify(d.results));
   }
@@ -94,6 +96,9 @@ if(process.env.ATLAS_ACCESS_PASSWORD){
   must(archive.ok&&history.archiveStart==='2026-11-01'&&Array.isArray(history.events),'calendar archive contract failed');
   const record=await request('/api/calendar?id='+agenda.events[0].id,{headers:{Cookie:cookie}}),recordData=await record.json();
   must(record.ok&&recordData.versions?.length>0,'calendar revision history missing');
+  must(agenda.sources.filter(s=>s.region==='中国').length>=8,'China source registry incomplete');
+  must([...agenda.events,...history.events].some(e=>e.region==='中国'&&e.sourceId!=='nbs'),'Chinese non-NBS events missing');
+  console.log('Calendar China events:',JSON.stringify(agenda.events.filter(e=>e.region==='中国').map(({sourceId,title,day,endDay})=>({sourceId,title,day,endDay}))));
   console.log('Calendar verified:',JSON.stringify({events:agenda.events.length,archiveEvents:history.events.length,from:agenda.from,to:agenda.to}));
   const logout=await request('/auth/logout',{method:'POST',headers:{Origin:origin,Cookie:cookie}});
   must(logout.status===303&&logout.headers.get('set-cookie')?.includes('Max-Age=0'),'logout failed');

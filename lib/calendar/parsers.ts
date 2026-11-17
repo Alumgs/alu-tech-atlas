@@ -113,9 +113,69 @@ function amd(raw:string,source:CalendarSource){return (raw.match(/<article\b[^>]
  const zone=tm&&/^E/.test(tm[4])?'America/New_York':'America/Los_Angeles',time=tm?`${pad(Number(tm[1])%12+(tm[3].toLowerCase()==='pm'?12:0))}:${tm[2]}`:'';
  const e=base({...source,timezone:zone},title+'|'+date.slice(0,4),title,date,time,link?new URL(link,source.url).href:source.url);if(!/financial|results|earnings/i.test(title))e.category='technology';return [e];
 });}
+/** Chinese IR announcements: the schedule is explicit in the title, not RSS pubDate. */
+function chinaIr(raw:string,source:CalendarSource){
+ if(!/<rss\b/i.test(raw))throw Error('投资者公告订阅格式变化');
+ return (raw.match(/<item\b[^>]*>[\s\S]*?<\/item>/gi)||[]).flatMap(item=>{
+  const field=(name:string)=>clean((item.match(new RegExp('<'+name+'[^>]*>([\\s\\S]*?)</'+name+'>','i'))?.[1]||'').replace(/<!\[CDATA\[|\]\]>/g,''));
+  const title=field('title'),desc=field('description'),url=field('link');
+  if(!/\b(?:results|financial)\b/i.test(title))return [];
+  const year=Number(title.match(/20\d{2}/)?.[0]),period=title.match(/(first|second|third|fourth)\s+quarter|(?:full\s+)?(?:fiscal\s+)?year/i)?.[0].toLowerCase().replace(/\s+/g,'-');
+  if(!year||!period)return [];
+  const upcoming=/\bto report\b|\bwill announce\b/i.test(title),result=/\bannounces\b/i.test(title)&&/today announced/i.test(desc);
+  const day=upcoming?englishDate(title.split(/\bon\b/i).at(-1)||'',year):result?englishDate(desc.slice(0,180)):'';
+  if(!validDay(day))return [];
+  const e=base(source,'earnings:'+period+':'+year,title,day,'',url);
+  e.summary=source.note+' '+(upcoming?'排期来自财报预告；具体发布时刻未明确，不推定为电话会时刻。':'原始结果公告明确说明当日发布。');
+  if(result){e.status='published';e.result='公司已发布该报告期的官方财报。请打开原文核对数值和口径。';e.resultUrl=url;}
+  return [e];
+ });
+}
+function alibaba(raw:string,source:CalendarSource){
+ const json=raw.match(/window\.__ICE_PAGE_PROPS__\s*=\s*([\s\S]*?);\s*<\/script>/)?.[1];if(!json)throw Error('阿里巴巴官方日历结构变化');
+ const data=JSON.parse(json) as {upcomingEvents?:Array<Record<string,unknown>>;pastEventsDatas?:Array<Record<string,unknown>>};
+ return [...(data.pastEventsDatas||[]),...(data.upcomingEvents||[])].flatMap(row=>{
+  const title=String(row.documentTitle||''),stamp=Number(row.eventDate),day=englishDate(String(row.eventDateLocal||''));if(!title||!validDay(day)||!Number.isFinite(stamp))return [];
+  const url=new URL('/en-US/document-'+row.documentId,source.url).href,period=title.match(/(January|February|March|April|May|June|July|August|September|October|November|December)\s+Quarter\s+(20\d{2})/i),key=period?'earnings:'+period[1].toLowerCase()+':'+period[2]:String(row.documentId);
+  const report=base(source,key,title,day,'',url),out=[report],summary=String(row.documentSummary||'');
+  // eventDate is the call time on this calendar, not the earnings release time.
+  if(/Conference Call:/i.test(summary)){
+   const call=base(source,key+':call','阿里巴巴财报电话会 / Alibaba earnings conference call',day,'',url);
+   call.startAt=new Date(stamp).toISOString();call.day=beijingDay(call.startAt);call.originalDate=day+' '+new Intl.DateTimeFormat('en-GB',{timeZone:'Asia/Shanghai',hour:'2-digit',minute:'2-digit',hourCycle:'h23'}).format(stamp);call.summary='官方日历公布的业绩电话会时间；财报发布另列日期，不据此推定财报上传时刻。';out.push(call);
+  }
+  return out;
+ });
+}
+function tencent(raw:string,source:CalendarSource){
+ return [...raw.matchAll(/<p\b[^>]*class="event-hk-time[^"\n]*"[^>]*>\s*(20\d{2})\/(\d{2})\/(\d{2}),\s*(\d{2}:\d{2})\s*<\/p>([\s\S]*?)<h3[^>]*>([\s\S]*?)<\/h3>/gi)].map(m=>{
+  const title=clean(m[6]),e=base(source,title.replace(/\s/g,''),title,`${m[1]}-${m[2]}-${m[3]}`,m[4]);e.summary='腾讯官网公布的业绩发布活动，采用香港时间（与北京时间相同）；不推定财报文件上传时刻。';e.importance='major';return e;
+ });
+}
+function apec(raw:string,source:CalendarSource){
+ return [...raw.matchAll(/(?:<h6\b[^>]*>|<p class="title">)([^<]+)<\/(?:h6|p)>([\s\S]{0,1800}?)(?=<\/section>|class="eyd-home-events-revamp__events-container"|$)/gi)].flatMap(m=>{
+  const text=clean(m[2]),date=text.match(/(\d{1,2})\s*[-–]\s*(\d{1,2})\s+([A-Za-z]+)\s+(20\d{2})/);if(!date)return [];
+  const title=clean(m[1]),day=englishDate(date[3]+' '+date[1]+', '+date[4]),end=englishDate(date[3]+' '+date[2]+', '+date[4]);
+  if(!validDay(day)||!validDay(end)||end<day)return [];
+  const china=/Republic of China|Shenzhen|Beijing|Shanghai/i.test(text),e=base(source,title+'|'+date[4],title,day);e.endDay=end;e.region=china?'中国':'全球';e.country=china?'中国':'亚太';e.importance=/Leaders|CEO Summit/i.test(title)?'major':'normal';e.summary=source.note+' '+text.slice(0,260);return [e];
+ });
+}
+export function governmentPolicy(raw:string,source:CalendarSource,url=source.url){
+ const title=clean(raw.match(/<title[^>]*>([\s\S]*?)<\/title>/i)?.[1]||'').replace(/[_－-]中国政府网.*$/,'');
+ const body=clean(raw.match(/<div[^>]*class="[^"]*(?:pages_content|TRS_Editor)[^"]*"[^>]*>([\s\S]*?)(?:<!--|<\/body>)/i)?.[1]||raw);
+ const date=body.match(/(?:自|于)\s*(20\d{2})年\s*(\d{1,2})月\s*(\d{1,2})日\s*(?:起)?\s*(?:施行|实施|生效)/);
+ if(!title||!date)return [];
+ const day=`${date[1]}-${pad(date[2])}-${pad(date[3])}`;if(!validDay(day))return [];
+ const event=base(source,url,title,day,'',url);event.summary='政策原文明确规定：'+date[0]+'。仅列生效日期，执行范围与例外请查原文。';return [event];
+}
+/** Rule-derived window remains tentative until a dated official release is available. */
+export function lprWindow(raw:string,source:CalendarSource,today=beijingDay()){
+ const text=clean(raw);if(!/每月\s*20\s*日（遇节假日顺延）/.test(text))throw Error('LPR 官方报价规则变化，停止推算');
+ const day=today.slice(0,7)+'-20',e=base(source,'lpr:'+today.slice(0,7),'中国 LPR 报价窗口（规则推算，待公告）',day);
+ e.certainty='tentative';e.status='tentative';e.importance='major';e.summary=source.note+' 20日仅为规则基准日，未推算调休和节假日；不作为当月已确认日期或时刻，不填入预期利率。';return [e];
+}
 export function parseCalendar(raw:string,source:CalendarSource):CalendarEvent[]{
  let events:CalendarEvent[]=[];
- switch(source.parser){case 'ics':events=ics(raw,source);break;case 'nbs':events=nbs(raw,source);break;case 'bea':events=bea(raw,source);break;case 'fed':events=fed(raw,source);break;case 'ecb':events=ecb(raw,source);break;case 'elections':events=elections(raw,source);break;case 'microsoft':events=microsoft(raw,source);break;case 'eurostat':events=eurostat(raw,source);break;case 'q4':events=q4(raw,source);break;case 'boe':events=boe(raw,source);break;case 'boj':events=boj(raw,source);break;case 'amd':events=amd(raw,source);break;default:throw Error('该来源需专用活动适配器');}
- const unique=new Map<string,CalendarEvent>();for(const e of events){if(e.day>=ARCHIVE_START&&e.title&&publicUrl(e.url))unique.set(e.key,e);}return [...unique.values()];
+ switch(source.parser){case 'lpr':events=lprWindow(raw,source);break;case 'china-ir':events=chinaIr(raw,source);break;case 'alibaba':events=alibaba(raw,source);break;case 'tencent':events=tencent(raw,source);break;case 'apec':events=apec(raw,source);break;case 'gov-policy':events=governmentPolicy(raw,source);break;case 'ics':events=ics(raw,source);break;case 'nbs':events=nbs(raw,source);break;case 'bea':events=bea(raw,source);break;case 'fed':events=fed(raw,source);break;case 'ecb':events=ecb(raw,source);break;case 'elections':events=elections(raw,source);break;case 'microsoft':events=microsoft(raw,source);break;case 'eurostat':events=eurostat(raw,source);break;case 'q4':events=q4(raw,source);break;case 'boe':events=boe(raw,source);break;case 'boj':events=boj(raw,source);break;case 'amd':events=amd(raw,source);break;default:throw Error('该来源需专用活动适配器');}
+ const unique=new Map<string,CalendarEvent>();for(const e of events){if(e.day>=ARCHIVE_START&&e.title&&publicUrl(e.url)){if(source.parser!=='china-ir'||unique.get(e.key)?.status!=='published'||e.status==='published')unique.set(e.key,e);}}return [...unique.values()];
 }
 export {base as calendarEvent};

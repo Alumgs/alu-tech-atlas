@@ -12,7 +12,7 @@ export function mergeItems(items:News[]){
  for(const n of items){if(!n||typeof n.title!=='string'||typeof n.source!=='string'||typeof n.type!=='string'||typeof n.date!=='string'||!eligible(n)||!['aidc','robot','ml'].includes(n.domain)||!publicUrl(n.url)||!Number.isFinite(Date.parse(n.date)))continue;const key=(n.scope||n.domain)+'|'+canonicalUrl(n.url),old=unique.get(key);if(!old||old.stale&&!n.stale)unique.set(key,classifyNews(n));}
  return [...unique.values()].sort((a,b)=>Date.parse(b.date)-Date.parse(a.date)).slice(0,5000);
 }
-export function useUpdates(domain:Domain){
+export function useUpdates(domain:Domain,enabled=true){
  const [data,setData]=useState<UpdateResult|null>(null),[loading,setLoading]=useState(false),[progress,setProgress]=useState(0),[added,setAdded]=useState(0),[error,setError]=useState(''),[isOld,setIsOld]=useState(false);
  const current=useRef<UpdateResult|null>(null),active=useRef(false),abort=useRef<AbortController|null>(null),domainRef=useRef(domain),lastAttempt=useRef(0);
  domainRef.current=domain;
@@ -34,11 +34,12 @@ export function useUpdates(domain:Domain){
   finally{if(abort.current?.signal===signal){active.current=false;if(!signal.aborted)setLoading(false);}}
  },[]);
  useEffect(()=>{
-  let saved:UpdateResult|null=null;try{saved=JSON.parse(localStorage.getItem(KEY)||localStorage.getItem('atlas-updates-v8')||'null');}catch{}
+  if(!enabled)return;
+  let saved:UpdateResult|null=null;try{saved=current.current||JSON.parse(localStorage.getItem(KEY)||localStorage.getItem('atlas-updates-v8')||'null');}catch{}
   if(saved&&Array.isArray(saved.items)&&Array.isArray(saved.statuses)){saved.items=mergeItems(saved.items);current.current=saved;setData(saved);setIsOld(true);const recent=Date.now()-Date.parse(saved.checkedAt)<15*60000&&day(Date.parse(saved.checkedAt))===day();if(recent&&saved.statuses.length===sources.length&&saved.statuses.some(s=>s.ok)){setIsOld(false);setProgress(sources.length);lastAttempt.current=Date.parse(saved.checkedAt);}else void refresh();}else void refresh();
   const check=()=>{if(document.visibilityState==='visible'&&(Date.now()-lastAttempt.current>15*60000||day(lastAttempt.current)!==day()))void refresh();};
   const timer=setInterval(check,60000);document.addEventListener('visibilitychange',check);
-  return()=>{clearInterval(timer);document.removeEventListener('visibilitychange',check);abort.current?.abort();active.current=false;};
- },[refresh]);
+  return()=>{clearInterval(timer);document.removeEventListener('visibilitychange',check);abort.current?.abort();active.current=false;setLoading(false);};
+ },[refresh,enabled]);
  return {data,loading,progress,added,error,isOld,refresh};
 }

@@ -14,4 +14,13 @@ export const calendarSources:CalendarSource[]=[
  {id:'meta',name:'Meta 投资者关系',url:'https://investor.atmeta.com/rss/Event.aspx?LanguageId=1',parser:'q4',category:'earnings',region:'美洲',country:'美国',timezone:'America/Los_Angeles',level:'official',note:'官方投资者活动订阅。'},
  {id:'amazon',name:'Amazon 投资者关系',url:'https://ir.aboutamazon.com/rss/Event.aspx?LanguageId=1',parser:'q4',category:'earnings',region:'美洲',country:'美国',timezone:'America/Los_Angeles',level:'official',note:'官方投资者活动订阅，空日历不代表没有未来计划。'},
  {id:'amd',name:'AMD 投资者关系',url:'https://ir.amd.com/news-events/ir-calendar',parser:'amd',category:'earnings',region:'美洲',country:'美国',timezone:'America/New_York',level:'official',note:'官方活动日程与后续原文入口。'},
+ {id:'lpr',name:'中国货币网 LPR',url:'https://www.chinamoney.org.cn/chinese/bklpr/',parser:'lpr',category:'central-bank',region:'中国',country:'中国',timezone:'Asia/Shanghai',level:'official',note:'依据官网每月20日、遇节假日顺延的规则提示报价窗口；当月尚未获得明确公告时标为暂定。'},
+ {id:'jd',name:'京东投资者关系',url:'https://ir.jd.com/rss/news-releases.xml',parser:'china-ir',category:'earnings',region:'中国',country:'中国',timezone:'Asia/Shanghai',level:'official',note:'只采用公告标题明确公布的财报日期；公告发布日期不作为财报日。'},
+ {id:'netease',name:'网易投资者关系',url:'https://ir.netease.com/rss/news-releases.xml',parser:'china-ir',category:'earnings',region:'中国',country:'中国',timezone:'Asia/Shanghai',level:'official',note:'官方财报预告；未明确的发布时刻保留待定。'},
+ {id:'baidu',name:'百度投资者关系',url:'https://ir.baidu.com/rss/news-releases.xml',parser:'china-ir',category:'earnings',region:'中国',country:'中国',timezone:'Asia/Shanghai',level:'official',note:'官方财报预告与实际结果公告，区分报告期和发布日期。'},
+ {id:'pdd',name:'拼多多 PDD 投资者关系',url:'https://investor.pddholdings.com/rss/news-releases.xml',parser:'china-ir',category:'earnings',region:'中国',country:'中国',timezone:'Asia/Shanghai',level:'official',note:'官方明确排期，保留原始公告和历史变更。'},
+ {id:'alibaba',name:'阿里巴巴投资者关系',url:'https://www.alibabagroup.com/en-US/ir-events',parser:'alibaba',category:'earnings',region:'中国',country:'中国',timezone:'Asia/Shanghai',level:'official',note:'官方结构化活动日历；财报日期与电话会时间分别收录。'},
+ {id:'tencent',name:'腾讯投资者关系',url:'https://www.tencent.com/zh-cn/investors/',parser:'tencent',category:'earnings',region:'中国',country:'中国',timezone:'Asia/Shanghai',level:'official',note:'采用官方投资者活动香港时间；不等同于财报文件上传时刻。'},
+ {id:'apec',name:'APEC 官方日程',url:'https://www.apec.org/',parser:'apec',category:'politics',region:'全球',country:'全球',timezone:'Asia/Shanghai',level:'official',note:'官方活动日期、举办地与跨日区间；中国承办活动纳入中国区。'},
+ {id:'gov-policy',name:'中国政府网政策文件',url:'https://www.gov.cn/pushinfo/v150203/rss.xml',parser:'gov-policy',category:'policy',region:'中国',country:'中国',timezone:'Asia/Shanghai',level:'official',note:'检查最新政策原文，仅提取明确写出的生效日期；发文日不冒充生效日。'},
 ];

@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {DatabaseSync} from 'node:sqlite';
 import {readFileSync} from 'node:fs';
 import {calendarSources} from '../lib/calendar/sources.ts';
-import {parseCalendar,calendarEvent} from '../lib/calendar/parsers.ts';
+import {parseCalendar,calendarEvent,lprWindow} from '../lib/calendar/parsers.ts';
 import {calendarWindow,localInstant,beijingDay} from '../lib/calendar/time.ts';
 import {saveEvents,listEvents} from '../worker/calendar/store.ts';
 import {nbsResultLink,resultEvidence} from '../worker/calendar/results.ts';
@@ -63,4 +63,28 @@ test('elapsed time alone cannot create a result and newer releases cannot overwr
  assert.equal(resultEvidence('<meta name="date" content="2026-12-16"><pre>A much newer report with a long enough body and unrelated period.</pre>',event),null);
  const old=resultEvidence('<meta name="date" content="2026-11-16"><pre>Consumer price index: verified original source report with original values and unchanged measurement definitions.</pre>',event);assert.ok(old?.text);
  assert.equal(nbsResultLink('<a href="./202611/t20261116_123.html">10月份国民经济运行总体平稳</a>',calendarEvent(source('nbs'),'nov','国民经济运行情况','2026-11-16')),'https://www.stats.gov.cn/sj/zxfb/202611/t20261116_123.html');
+});
+test('Chinese IR uses announced report dates and resolves results regardless of RSS ordering',()=>{
+ const schedule='<item><title>Baidu to Report Third Quarter 2026 Financial Results on November 16, 2026</title><link>https://ir.baidu.com/schedule</link><pubDate>Tue, 27 Oct 2026 05:00:00 -0400</pubDate></item>';
+ const result='<item><title>Baidu Announces Third Quarter 2026 Results</title><link>https://ir.baidu.com/result</link><description>BEIJING, Nov. 16, 2026 -- Baidu today announced its unaudited financial results.</description></item>';
+ for(const items of [schedule+result,result+schedule]){const e=parseCalendar('<rss><channel>'+items+'</channel></rss>',source('baidu'));assert.equal(e.length,1);assert.equal(e[0].day,'2026-11-16');assert.equal(e[0].status,'published');assert.equal(e[0].resultUrl,'https://ir.baidu.com/result');}
+ const netease=parseCalendar('<rss><item><title>NetEase to Report Third Quarter 2026 Financial Results on November 19</title><link>https://ir.netease.com/report</link><pubDate>Thu, 05 Nov 2026 03:30:00 -0500</pubDate></item></rss>',source('netease'));
+ assert.equal(netease[0].day,'2026-11-19');assert.equal(netease[0].startAt,undefined);
+ assert.equal(parseCalendar('<rss><item><title>Company Results</title><pubDate>Thu, 19 Nov 2026</pubDate></item></rss>',source('jd')).length,0);
+});
+test('Alibaba separates release date from the explicitly timed earnings call',()=>{
+ const raw='<script>window.__ICE_PAGE_PROPS__='+JSON.stringify({upcomingEvents:[{documentId:'123',eventDate:Date.parse('2026-11-19T12:00:00Z'),eventDateLocal:'November 19, 2026',documentPublishTime:Date.parse('2026-11-06T00:00Z'),documentTitle:'Alibaba Group Will Announce September Quarter 2026 Results on November 19, 2026',documentSummary:'Conference Call: November 19, 2026 8:00 p.m. Hong Kong Time'}]})+';</script>';
+ const events=parseCalendar(raw,source('alibaba'));assert.equal(events.length,2);assert.equal(events[0].day,'2026-11-19');assert.equal(events[0].startAt,undefined);assert.equal(events[1].startAt,'2026-11-19T12:00:00.000Z');assert.notEqual(events[0].key,events[1].key);
+});
+test('APEC preserves multi-day host-China events and government policy uses effective dates',()=>{
+ const raw='<h6>APEC CEO Summit</h6><div><p>17 - 18 November 2026</p></div><div><p>Shenzhen, People&#39;s Republic of China</p></div></section>';
+ const events=parseCalendar(raw,source('apec'));assert.equal(events[0].day,'2026-11-17');assert.equal(events[0].endDay,'2026-11-18');assert.equal(events[0].region,'中国');
+ const policy=parseCalendar('<title>某条例_中国政府网</title><div class="pages_content">发布日期：2026年11月10日。本条例自2026年12月1日起施行。<!-- footer -->',source('gov-policy'));
+ assert.equal(policy[0].day,'2026-12-01');assert.equal(policy[0].category,'policy');assert.equal(policy[0].startAt,undefined);
+ assert.equal(parseCalendar('<title>政策发布</title><p>2026年11月10日，组织实施工作。</p>',source('gov-policy')).length,0);
+});
+
+test('LPR rule windows never become official dates or fabricate holiday adjustments',()=>{
+ const e=lprWindow('每月20日（遇节假日顺延）',source('lpr'),'2026-11-17')[0];assert.equal(e.day,'2026-11-20');assert.equal(e.certainty,'tentative');assert.equal(e.status,'tentative');assert.equal(e.startAt,undefined);
+ assert.throws(()=>lprWindow('规则已改为不定期公布',source('lpr'),'2026-11-17'));
 });

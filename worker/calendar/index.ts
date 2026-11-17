@@ -1,6 +1,6 @@
 import {nbsResultLink,resultEvidence} from './results.ts';
 import {calendarSources} from '../../lib/calendar/sources.ts';
-import {parseCalendar,calendarEvent,clean,englishDate} from '../../lib/calendar/parsers.ts';
+import {parseCalendar,calendarEvent,clean,englishDate,governmentPolicy} from '../../lib/calendar/parsers.ts';
 import {beijingDay,addDays,calendarWindow,ARCHIVE_START,localInstant} from '../../lib/calendar/time.ts';
 import type {CalendarEvent,CalendarSource} from '../../lib/calendar/types';
 import {boundedText,boundedJson} from '../../lib/http-safety.ts';
@@ -38,6 +38,13 @@ async function collect(source:CalendarSource){
   if(source.id!=='bls')throw error;
   // Public BLS-maintained alternate host, not a third-party proxy.
   raw=await sourceText('https://blsmon1.bls.gov/schedule/news_release/bls.ics',['https://blsmon1.bls.gov']);
+ }
+ if(source.parser==='gov-policy'){
+  if(!/<rss\b/i.test(raw))throw Error('政府政策订阅格式变化');
+  const links=[...raw.matchAll(/<link>\s*(https:\/\/www\.gov\.cn\/zhengce\/content\/[^<]+)<\/link>/gi)].map(m=>m[1]);
+  const events=(await Promise.all([...new Set(links)].slice(0,6).map(async link=>{
+   const page=await sourceText(link,['https://www.gov.cn']);return governmentPolicy(page,source,link);
+  }))).flat();return events.filter(e=>e.day>=ARCHIVE_START);
  }
  let events=parseCalendar(raw,source);
  if(!events.length&&!/<rss\b/i.test(raw))throw Error('未识别到有效日程，需核查源站格式');

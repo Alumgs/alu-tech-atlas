@@ -1,2 +1,2 @@
-import {GlobalCalendar} from '@/components/global-calendar';
-export default function CalendarPage(){return <GlobalCalendar/>;}
+import {redirect} from 'next/navigation';
+export default function CalendarPage(){redirect('/?domain=aidc&view=calendar');}

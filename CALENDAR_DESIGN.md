@@ -1,6 +1,6 @@
 # Atlas Global Calendar
 
-User scope: seven inclusive Beijing calendar days of previews; historical months from 2026-11 without a rolling deletion window. The world briefing links to `/calendar`. Existing credentials, sessions, news feeds and reports are retained.
+User scope: seven inclusive Beijing calendar days of previews; historical months from 2026-11 without a rolling deletion window. The world briefing switches in place to `/?domain=aidc&view=calendar`; legacy `/calendar` redirects there. The calendar stays mounted after first use, retaining selection, filters and records. News collection pauses while the calendar is active; cached news remains in memory. Range snapshots coalesce concurrent reads and restore recent windows; refresh checks only due sources unless explicitly forced. Stored event detail/history loads independently of external verification. Existing credentials, sessions, news feeds and reports are retained.
 
 ## Durable event records
 
@@ -26,3 +26,9 @@ Tests cover seven-day windows, unbounded-age monthly archive lookup, DST/cross-d
 The deployed Worker exposed two environment-specific issues: edge fetch supports manual/follow redirects, not redirect:error; Microsoft has a same-origin redirect. Redirect handling is now bounded and manual. BLS denies edge-network access; an independent GitHub Actions runner downloads only the public official BLS ICS and sends it through a same-origin, session-protected, administrator-password-confirmed import route restricted to BLS. It runs after deployment and on a half-hour schedule using the existing CI site credential. No new credential is disclosed or stored in source. If the current site password is changed, the matching Actions credential must remain current for this runner. The ordinary Worker cron and source checks still work independently.
 
 When edge fetch fails but an independently verified snapshot is under an hour old, the UI labels it as a fallback snapshot and retains its real last-success timestamp; the failed direct attempt never advances that timestamp. Otherwise the source reports failure and retains its archive. The official alternate BLS host is also attempted; no third-party proxy or anti-bot challenge bypass is used.
+
+## 4.3.1 coverage expansion
+
+Chinese sources now include NBS, official JD/NetEase/Baidu/PDD releases, Alibaba structured investor events, Tencent investor activities, China Money LPR rules and government policy originals. APEC official dates classify China-hosted events in the China filter, preserving multi-day durations. Announcement dates never substitute for event dates. Alibaba earnings release and conference call are separate records. Published Chinese earnings override their own prior schedule regardless of feed order. Government policy collection checks up to six latest original policy documents for explicit effective dates; relative/ambiguous dates are excluded. The LPR monthly rule produces only a conspicuously tentative date-only window, with no inferred holiday adjustment, precise clock or rate forecast. Source health and zero matches are distinct. This expands verified coverage and does not claim a complete world calendar.
+
+Performance evidence: eliminated document navigation between the portal and calendar; removed duplicate initial snapshot fetches; reuse mounted calendar state; pause hidden source work and render saved history before slow source checks. No browser performance trace was available, so no measured latency percentage is claimed.
