@@ -55,6 +55,7 @@ try{
  await page.locator('#source-directory-panel-world>summary').click();
  const popup=()=>page.locator('.source-picker:visible');
  await page.locator('.source-picker-trigger:visible').click();await popup().waitFor();
+ await page.waitForFunction(()=>{const box=document.querySelector('.source-picker')?.getBoundingClientRect();return box&&box.top>=0&&box.bottom<=innerHeight+1;});
  await popup().getByRole('button',{name:'清空',exact:true}).click();
  const options=popup().locator('.source-picker-options>label');const chosen=[];
  for(let i=0;i<await options.count()&&chosen.length<2;i++){const option=options.nth(i);if(Number(await option.locator('b').innerText())>0){chosen.push((await option.locator('span').innerText()).split('\n')[0]);await option.locator('input').check();}}
