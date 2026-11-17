@@ -8,7 +8,8 @@ const sources=[{id:'bls',url:'https://www.bls.gov/schedule/news_release/bls.ics'
 const snapshots=await Promise.allSettled(sources.map(async source=>{
  for(let attempt=0;attempt<3;attempt++){
   try{
-   const r=await fetch(source.url,{signal:AbortSignal.timeout(20000),headers:{'User-Agent':source.id==='bls'?'AtlasCalendar/1.0 (public official release calendar)':'Mozilla/5.0','Accept':'text/html,text/calendar;q=0.9'}});
+   const target=source.id==='eu-council'?[source.url,source.url+'?Category=meeting',source.url+'?page=1'][attempt]:source.url;
+   const r=await fetch(target,{signal:AbortSignal.timeout(20000),headers:{'User-Agent':source.id==='bls'?'AtlasCalendar/1.0 (public official release calendar)':'Mozilla/5.0','Accept':'text/html,text/calendar;q=0.9'}});
    if(!r.ok)throw Error(source.id+' official HTTP '+r.status);
    const raw=await r.text();if(raw.length>800000||!source.valid(raw))throw Error(source.id+' invalid official calendar');return {id:source.id,raw};
   }catch(error){if(attempt===2)throw error;}
