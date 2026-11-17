@@ -1,3 +1,4 @@
+import {groupCalendarEvents} from '../../lib/calendar/presentation.ts';
 import {nbsResultLink,resultEvidence} from './results.ts';
 import {calendarSources} from '../../lib/calendar/sources.ts';
 import {parseCalendar,calendarEvent,clean,englishDate,governmentPolicy} from '../../lib/calendar/parsers.ts';
@@ -118,7 +119,8 @@ export async function calendarApi(request:Request,env:CalendarEnv){
   }
   const today=beijingDay(),window=calendarWindow(url.searchParams.get('month'),today),[data,status]=await Promise.all([listEvents(db,window.from,window.to),states(db)]);
   const months=await db.prepare('SELECT DISTINCT substr(day,1,7) AS month FROM calendar_events WHERE day>=? AND day<=? ORDER BY month DESC').bind(ARCHIVE_START,today).all<{month:string}>();
-  return json({...data,...window,today,archiveStart:ARCHIVE_START,storage:'cloudflare-d1',months:months.results.map(x=>x.month),sources:calendarSources.map(s=>({...s,state:status.find(x=>x.source_id===s.id)}))});
+  const grouped=groupCalendarEvents(data.events),coverage=Array.from({length:Math.round((Date.parse(window.to)-Date.parse(window.from))/86400000)+1},(_,i)=>{const day=addDays(window.from,i),events=grouped.filter(e=>e.day<=day&&(e.endDay||e.day)>=day);return {day,total:events.length,starting:events.filter(e=>e.day===day).length,ongoing:events.filter(e=>e.day<day).length};});
+  return json({...data,events:grouped,coverage,rawCount:data.events.length,mergedCount:data.events.length-grouped.length,...window,today,archiveStart:ARCHIVE_START,storage:'cloudflare-d1',months:months.results.map(x=>x.month),sources:calendarSources.map(s=>({...s,state:status.find(x=>x.source_id===s.id)}))});
  }catch(error){console.error(JSON.stringify({event:'calendar_api',error:String(error)}));return json({error:error instanceof Error?error.message:'读取日历失败。'},url.searchParams.has('month')?400:503);}
 }
 export async function scheduledCalendar(env:CalendarEnv){if(!env.CALENDAR_DB)return;for(let i=0;i<calendarSources.length;i+=3)await refreshSources(env.CALENDAR_DB,calendarSources.slice(i,i+3).map(s=>s.id));}

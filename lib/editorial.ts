@@ -36,11 +36,12 @@ export function scoreReasons(n:News,now=Date.now()):string[]{
 function normalizeTitle(n:News):string{
  let title=n.title.toLowerCase();const source=n.source.toLowerCase().trim();
  if(source&&title.endsWith(' - '+source))title=title.slice(0,-source.length-3);
+ title=title.replace(/\s+(?:-|–|—|\|)\s*(?:bbc(?: news)?|the verge|reuters|路透社|中新网|中国新闻网|同花顺)\s*$/i,'');
  return title.replace(/[\u200B-\u200D\uFEFF]/g,'').replace(/[^\p{L}\p{N}]/gu,'');
 }
 function grams(value:string){const chars=Array.from(value),out=new Set<string>();for(let i=0;i<chars.length-1;i++)out.add(chars[i]+chars[i+1]);return out;}
 function sameEvent(a:News,b:News):boolean{
- if(a.domain!==b.domain||a.scope!==b.scope||Math.abs(Date.parse(a.date)-Date.parse(b.date))>14*86400000)return false;
+ if((a.scope!=='world'&&a.domain!==b.domain)||a.scope!==b.scope||Math.abs(Date.parse(a.date)-Date.parse(b.date))>14*86400000)return false;
  const left=normalizeTitle(a),right=normalizeTitle(b);
  if(!left||!right)return false;
  if(left===right)return true;
@@ -72,7 +73,7 @@ export function clusterStories(items:News[],now=Date.now()):NewsEvent[]{
  const events:NewsEvent[]=[],urls=new Map<string,NewsEvent>(),titles=new Map<string,NewsEvent>(),recent=new Map<string,NewsEvent[]>();
  for(const item of sorted.slice(0,5000)){
   const canonical=(item.scope||item.domain)+'|'+canonicalUrl(item.url),titleKey=(item.scope||item.domain)+'|'+normalizeTitle(item),byTitle=titles.get(titleKey);
-  const event=urls.get(canonical)||(byTitle&&sameEvent(byTitle.primary,item)?byTitle:undefined)||(recent.get(item.domain)||[]).find(e=>sameEvent(e.primary,item));
+  const event=urls.get(canonical)||(byTitle&&sameEvent(byTitle.primary,item)?byTitle:undefined)||(recent.get(item.scope==='world'?'world':item.domain)||[]).find(e=>sameEvent(e.primary,item));
   if(event){
    event.primary=representative(event.primary,item);event.score=scoreNews(event.primary,now);
    if(!event.reports.some(n=>canonicalUrl(n.url)===canonicalUrl(item.url)))event.reports.push(item);
@@ -80,7 +81,7 @@ export function clusterStories(items:News[],now=Date.now()):NewsEvent[]{
   }else{
    const next:NewsEvent={id:canonical,primary:item,reports:[item],sourceCount:1,heat:0,score:scoreNews(item,now),latestDate:item.date};
    events.push(next);urls.set(canonical,next);titles.set(titleKey,next);
-   const pool=recent.get(item.domain)||[];pool.push(next);if(pool.length>120)pool.shift();recent.set(item.domain,pool);
+   const recentKey=item.scope==='world'?'world':item.domain,pool=recent.get(recentKey)||[];pool.push(next);if(pool.length>120)pool.shift();recent.set(recentKey,pool);
   }
  }
  for(const event of events){

@@ -32,3 +32,12 @@ test('duplicate suppression prefers stronger sources and keeps unrelated items',
   assert.ok(result.some(n=>n.url===distinct.url));
   assert.equal(rankNews([duplicate,preferred]).length,1);
 });
+
+test('world copies across domain attribution and known publisher suffixes share one event',()=>{
+ const title='European council agrees new technology infrastructure plan';
+ const a=item({title,domain:'aidc',scope:'world',source:'BBC World',url:'https://www.bbc.com/news/one'});
+ const b=item({title:title+' - BBC News',domain:'ml',scope:'world',source:'Another index',url:'https://example.com/copy'});
+ assert.equal(dedupeStories([a,b]).length,1);
+ const later=item({title:title+' 2027',scope:'world',url:'https://example.com/later'});
+ assert.equal(dedupeStories([a,later]).length,2);
+});
