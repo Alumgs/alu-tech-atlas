@@ -12,7 +12,7 @@ export function mergeItems(items:News[]){
  for(const n of items){if(!n||typeof n.title!=='string'||typeof n.source!=='string'||typeof n.type!=='string'||typeof n.date!=='string'||!eligible(n)||!['aidc','robot','ml'].includes(n.domain)||!publicUrl(n.url)||!Number.isFinite(Date.parse(n.date)))continue;const key=(n.scope||n.domain)+'|'+canonicalUrl(n.url),old=unique.get(key);if(!old||old.stale&&!n.stale)unique.set(key,classifyNews(n));}
  return [...unique.values()].sort((a,b)=>Date.parse(b.date)-Date.parse(a.date)).slice(0,5000);
 }
-export function useUpdates(domain:Domain,enabled=true){
+export function useUpdates(domain:Domain,enabled=true,autoRefresh=true){
  const [data,setData]=useState<UpdateResult|null>(null),[loading,setLoading]=useState(false),[progress,setProgress]=useState(0),[added,setAdded]=useState(0),[error,setError]=useState(''),[isOld,setIsOld]=useState(false);
  const current=useRef<UpdateResult|null>(null),active=useRef(false),abort=useRef<AbortController|null>(null),domainRef=useRef(domain),lastAttempt=useRef(0);
  domainRef.current=domain;
@@ -28,7 +28,7 @@ export function useUpdates(domain:Domain,enabled=true){
    const response=await fetch('/api/updates?source='+index+(force?'&force=1':''),{cache:'no-store',signal:AbortSignal.any([signal,AbortSignal.timeout(18000)])});if(response.status===401){abort.current?.abort();window.location.assign('/auth/login?returnTo='+encodeURIComponent(location.pathname+location.search));return;}if(!response.ok)throw Error('HTTP '+response.status);
    const result:UpdateResult=await response.json();if(!Array.isArray(result.items)||!result.statuses?.[0])throw Error('无效响应');statuses.push(result.statuses[0]);if(result.statuses[0].ok)perFeed.set(s.name,result.items);
   }catch{if(signal.aborted)return;statuses.push({name:s.name,ok:false,count:0,error:'连接超时或暂不可用',checkedAt:new Date().toISOString()});}
-  complete++;if(Date.now()-lastPaint>500||complete===order.length){publish();lastPaint=Date.now();}
+  complete++;if(Date.now()-lastPaint>1500||complete===order.length){publish();lastPaint=Date.now();}
   }};
   try{await Promise.all([worker(),worker(),worker(),worker()]);if(!signal.aborted){publish();const snapshot=current.current;if(snapshot){const persist=()=>{try{localStorage.setItem(KEY,JSON.stringify(snapshot));}catch{}};if('requestIdleCallback' in window)window.requestIdleCallback(persist,{timeout:2000});else setTimeout(persist,0);}if(!statuses.some(s=>s.ok))setError(current.current?.items.length?'本次联网未成功，保留上次缓存。':'本次联网未成功，暂无可用缓存。请稍后重试。');}}
   finally{if(abort.current?.signal===signal){active.current=false;if(!signal.aborted)setLoading(false);}}
@@ -36,10 +36,10 @@ export function useUpdates(domain:Domain,enabled=true){
  useEffect(()=>{
   if(!enabled)return;
   let saved:UpdateResult|null=null;try{saved=current.current||JSON.parse(localStorage.getItem(KEY)||localStorage.getItem('atlas-updates-v8')||'null');}catch{}
-  if(saved&&Array.isArray(saved.items)&&Array.isArray(saved.statuses)){saved.items=mergeItems(saved.items);current.current=saved;setData(saved);setIsOld(true);const recent=Date.now()-Date.parse(saved.checkedAt)<15*60000&&day(Date.parse(saved.checkedAt))===day();if(recent&&saved.statuses.length===sources.length&&saved.statuses.some(s=>s.ok)){setIsOld(false);setProgress(sources.length);lastAttempt.current=Date.parse(saved.checkedAt);}else void refresh();}else void refresh();
-  const check=()=>{if(document.visibilityState==='visible'&&(Date.now()-lastAttempt.current>15*60000||day(lastAttempt.current)!==day()))void refresh();};
+  if(saved&&Array.isArray(saved.items)&&Array.isArray(saved.statuses)){if(!current.current)saved.items=mergeItems(saved.items);current.current=saved;setData(saved);setIsOld(true);const recent=Date.now()-Date.parse(saved.checkedAt)<15*60000&&day(Date.parse(saved.checkedAt))===day();if(recent&&saved.statuses.length===sources.length&&saved.statuses.some(s=>s.ok)){setIsOld(false);setProgress(sources.length);lastAttempt.current=Date.parse(saved.checkedAt);}else if(autoRefresh)void refresh();}else void refresh();
+  const check=()=>{if(autoRefresh&&document.visibilityState==='visible'&&(Date.now()-lastAttempt.current>15*60000||day(lastAttempt.current)!==day()))void refresh();};
   const timer=setInterval(check,60000);document.addEventListener('visibilitychange',check);
   return()=>{clearInterval(timer);document.removeEventListener('visibilitychange',check);abort.current?.abort();active.current=false;setLoading(false);};
- },[refresh,enabled]);
+ },[refresh,enabled,autoRefresh]);
  return {data,loading,progress,added,error,isOld,refresh};
 }

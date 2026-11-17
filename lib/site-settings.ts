@@ -12,6 +12,7 @@ export type SiteSettings = {
   minEditorialScore: number;
   editionSize: number;
   enableAIEnrichment: boolean;
+  enableAutoTranslation: boolean;
   allowReaderFallback: boolean;
 };
 
@@ -29,6 +30,7 @@ export const defaultSiteSettings: SiteSettings = {
   minEditorialScore: 34,
   editionSize: 6,
   enableAIEnrichment: true,
+  enableAutoTranslation: true,
   allowReaderFallback: true,
 };
 
@@ -54,6 +56,7 @@ export function sanitizeSiteSettings(value: unknown): SiteSettings {
     minEditorialScore: typeof source.minEditorialScore==='number'&&Number.isFinite(source.minEditorialScore)?Math.max(0,Math.min(90,Math.round(source.minEditorialScore))):34,
     editionSize: typeof source.editionSize==='number'&&Number.isFinite(source.editionSize)?Math.max(1,Math.min(12,Math.round(source.editionSize))):6,
     enableAIEnrichment: source.enableAIEnrichment!==false,
+    enableAutoTranslation: typeof source.enableAutoTranslation==='boolean'?source.enableAutoTranslation:source.enableAIEnrichment!==false,
     allowReaderFallback: source.allowReaderFallback!==false,
   };
 }

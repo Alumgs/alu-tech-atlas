@@ -42,3 +42,8 @@ test('edition settings clamp input and preserve explicit privacy controls',()=>{
  assert.equal(preferences.minEditorialScore,90);assert.equal(preferences.editionSize,1);
  assert.equal(preferences.enableAIEnrichment,false);assert.equal(preferences.allowReaderFallback,false);
 });
+test('translation service permission is independent from AI summary enrichment',()=>{
+ const a=sanitizeSiteSettings({enableAIEnrichment:false,enableAutoTranslation:true}),b=sanitizeSiteSettings({enableAIEnrichment:true,enableAutoTranslation:false});
+ assert.equal(sanitizeSiteSettings({enableAIEnrichment:false}).enableAutoTranslation,false);
+ assert.equal(a.enableAutoTranslation,true);assert.equal(a.enableAIEnrichment,false);assert.equal(b.enableAutoTranslation,false);assert.equal(b.enableAIEnrichment,true);
+});

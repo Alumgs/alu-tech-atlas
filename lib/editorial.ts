@@ -40,16 +40,14 @@ function normalizeTitle(n:News):string{
  return title.replace(/[\u200B-\u200D\uFEFF]/g,'').replace(/[^\p{L}\p{N}]/gu,'');
 }
 function grams(value:string){const chars=Array.from(value),out=new Set<string>();for(let i=0;i<chars.length-1;i++)out.add(chars[i]+chars[i+1]);return out;}
-function sameEvent(a:News,b:News):boolean{
- if((a.scope!=='world'&&a.domain!==b.domain)||a.scope!==b.scope||Math.abs(Date.parse(a.date)-Date.parse(b.date))>14*86400000)return false;
- const left=normalizeTitle(a),right=normalizeTitle(b);
- if(!left||!right)return false;
- if(left===right)return true;
- // Different model versions, quarters and measured values remain separate updates.
- const numbers=(s:string)=>[...s.matchAll(/\d+(?:\.\d+)?/g)].map(m=>m[0]).sort().join('|');
- if(numbers(a.title)!==numbers(b.title)||Math.min(left.length,right.length)<14)return false;
- const x=grams(left),y=grams(right);let common=0;for(const part of x)if(y.has(part))common++;
- return common/Math.max(1,x.size+y.size-common)>=0.82;
+type MatchFeatures={title:string;numbers:string;time:number;url:string;score:number;grams?:Set<string>};
+function sameEvent(a:News,b:News,read:(n:News)=>MatchFeatures):boolean{
+ if((a.scope!=='world'&&a.domain!==b.domain)||a.scope!==b.scope)return false;
+ const x=read(a),y=read(b);if(Math.abs(x.time-y.time)>14*86400000||!x.title||!y.title)return false;
+ if(x.title===y.title)return true;
+ if(x.numbers!==y.numbers||Math.min(x.title.length,y.title.length)<14)return false;
+ x.grams||=grams(x.title);y.grams||=grams(y.title);let common=0;for(const part of x.grams)if(y.grams.has(part))common++;
+ return common/Math.max(1,x.grams.size+y.grams.size-common)>=.82;
 }
 export type NewsEvent={id:string;primary:News;reports:News[];sourceCount:number;heat:number;score:number;latestDate:string};
 function publisher(n:News):string{
@@ -68,24 +66,26 @@ function representative(a:News,b:News):News{
 }
 /** Conservative, bounded grouping. Ambiguous reports stay separate. */
 export function clusterStories(items:News[],now=Date.now()):NewsEvent[]{
- const sorted=items.filter(n=>canonicalUrl(n.url)&&Number.isFinite(Date.parse(n.date))&&Date.parse(n.date)<=now+300000)
- .sort((a,b)=>Number(Boolean(a.stale))-Number(Boolean(b.stale))||scoreNews(b,now)-scoreNews(a,now)||Date.parse(b.date)-Date.parse(a.date));
+ const features=new Map<News,MatchFeatures>();
+ const read=(n:News)=>{let value=features.get(n);if(!value){value={title:normalizeTitle(n),numbers:[...n.title.matchAll(/\d+(?:\.\d+)?/g)].map(m=>m[0]).sort().join('|'),time:Date.parse(n.date),url:canonicalUrl(n.url),score:scoreNews(n,now)};features.set(n,value);}return value;};
+ const sorted=items.filter(n=>{const value=read(n);return value.url&&Number.isFinite(value.time)&&value.time<=now+300000;})
+ .sort((a,b)=>Number(Boolean(a.stale))-Number(Boolean(b.stale))||read(b).score-read(a).score||read(b).time-read(a).time);
  const events:NewsEvent[]=[],urls=new Map<string,NewsEvent>(),titles=new Map<string,NewsEvent>(),recent=new Map<string,NewsEvent[]>();
  for(const item of sorted.slice(0,5000)){
-  const canonical=(item.scope||item.domain)+'|'+canonicalUrl(item.url),titleKey=(item.scope||item.domain)+'|'+normalizeTitle(item),byTitle=titles.get(titleKey);
-  const event=urls.get(canonical)||(byTitle&&sameEvent(byTitle.primary,item)?byTitle:undefined)||(recent.get(item.scope==='world'?'world':item.domain)||[]).find(e=>sameEvent(e.primary,item));
+  const canonical=(item.scope||item.domain)+'|'+read(item).url,titleKey=(item.scope||item.domain)+'|'+read(item).title,byTitle=titles.get(titleKey);
+  const event=urls.get(canonical)||(byTitle&&sameEvent(byTitle.primary,item,read)?byTitle:undefined)||(recent.get(item.scope==='world'?'world':item.domain)||[]).find(e=>sameEvent(e.primary,item,read));
   if(event){
-   event.primary=representative(event.primary,item);event.score=scoreNews(event.primary,now);
-   if(!event.reports.some(n=>canonicalUrl(n.url)===canonicalUrl(item.url)))event.reports.push(item);
+   event.primary=representative(event.primary,item);event.score=read(event.primary).score;
+   if(!urls.has(canonical))event.reports.push(item);
    urls.set(canonical,event);
   }else{
-   const next:NewsEvent={id:canonical,primary:item,reports:[item],sourceCount:1,heat:0,score:scoreNews(item,now),latestDate:item.date};
+   const next:NewsEvent={id:canonical,primary:item,reports:[item],sourceCount:1,heat:0,score:read(item).score,latestDate:item.date};
    events.push(next);urls.set(canonical,next);titles.set(titleKey,next);
    const recentKey=item.scope==='world'?'world':item.domain,pool=recent.get(recentKey)||[];pool.push(next);if(pool.length>120)pool.shift();recent.set(recentKey,pool);
   }
  }
  for(const event of events){
-  event.reports.sort((a,b)=>Date.parse(b.date)-Date.parse(a.date));event.latestDate=event.reports[0].date;
+  event.reports.sort((a,b)=>read(b).time-read(a).time);event.latestDate=event.reports[0].date;
   event.sourceCount=new Set(event.reports.map(publisher)).size;
   const heat=new Map<string,number>();
   for(const report of event.reports){const age=(now-Date.parse(report.date))/3600000;if(/^\d{4}-\d{2}-\d{2}$/.test(report.date)||age<0||age>48||report.stale||report.historical)continue;const key=publisher(report);heat.set(key,Math.max(heat.get(key)||0,100*Math.pow(0.5,age/24)));}

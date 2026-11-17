@@ -1,6 +1,7 @@
 'use client';
 import {relevance} from '@/lib/relevance';
 import {selectBriefs,balanceWorld} from '@/lib/selection';
+import {useReaderPreferences} from './reader-preferences';
 import {Localized} from '@/components/language';
 import {useEffect,useMemo,useRef,useState} from 'react';
 import {ArrowUpRight,Bookmark,Check,Download,Flame,ListFilter,Upload} from 'lucide-react';
@@ -29,18 +30,18 @@ const topics:Record<Domain,Array<[string,RegExp]>>={
  robot:[['人形机器人',/humanoid|人形|人型|unitree|宇树|优必选|figure|optimus/i],['仿真与世界模型',/simulation|isaac|world.model|cosmos|genie|仿真|世界模型/i],['操作与控制',/manipulat|grasp|control|运动控制|抓取|操作|机械臂/i]],
  ml:[['模型与训练',/training|pretrain|language.model|llm|训练|大模型|预训练|架构/i],['推理与部署',/inference|quantiz|distill|serving|推理|部署|量化|蒸馏/i],['智能体与应用',/agent|rag|tool|智能体|应用|检索增强|工具调用/i]]
 };
-export function NewsFeed({items,domain,domainName,loading,query='',newsType='全部',region='all',pageSize=24,scope=domain}:{items:News[];domain:Domain;domainName:string;loading:boolean;query?:string;newsType?:string;region?:string;pageSize?:number;scope?:StreamScope}){
- const {t}=useLanguage();
+export function NewsFeed({items,domain,domainName,loading,query='',newsType='全部',region='all',pageSize=24,scope=domain,clustered,filterKey='',active=true}:{active?:boolean;clustered?:NewsEvent[];filterKey?:string;items:News[];domain:Domain;domainName:string;loading:boolean;query?:string;newsType?:string;region?:string;pageSize?:number;scope?:StreamScope}){
+ const {t}=useLanguage();const {preferences}=useReaderPreferences();
  const topicList=scope==='world'?worldTopics.map(([zh,,re])=>[zh,re] as [string,RegExp]):topics[domain];
  const [reading,setReading]=useState<Reading>(emptyReading),[ready,setReady]=useState(false),[sort,setSort]=useState('score'),[selectedOnly,setSelectedOnly]=useState(scope!=='world'),[tier,setTier]=useState('all'),[topic,setTopic]=useState('all');
  const [savedOnly,setSavedOnly]=useState(false),[unreadOnly,setUnreadOnly]=useState(false),[numbersOnly,setNumbersOnly]=useState(false),[limit,setLimit]=useState(pageSize),[notice,setNotice]=useState(''),[ascending,setAscending]=useState(false);
  const importRef=useRef<HTMLInputElement>(null);
- useEffect(()=>{try{setReading(safeReading(JSON.parse(localStorage.getItem(storageKey)||'{}')));}catch{}setReady(true);},[]);
+ useEffect(()=>{if(!active)return;try{setReading(safeReading(JSON.parse(localStorage.getItem(storageKey)||'{}')));}catch{}setReady(true);},[active]);
  useEffect(()=>{if(ready)try{localStorage.setItem(storageKey,JSON.stringify(reading));}catch{setNotice('本机存储空间不足，请导出阅读备份。');}},[reading,ready]);
  useEffect(()=>{setLimit(pageSize);setTopic('all');},[scope,pageSize]);
- useEffect(()=>{setLimit(pageSize);},[selectedOnly,sort,tier,topic,savedOnly,unreadOnly,numbersOnly,query,newsType,region,pageSize]);
+ useEffect(()=>{setLimit(pageSize);},[selectedOnly,sort,tier,topic,savedOnly,unreadOnly,numbersOnly,query,newsType,region,pageSize,filterKey]);
  const pool=useMemo(()=>savedOnly?reading.saved.filter(n=>inStream(n,scope)&&(newsType==='全部'||n.type===newsType)&&(region==='all'||n.region==='cn')&&(!query||(n.title+' '+n.source+' '+n.summary).toLowerCase().includes(query.toLowerCase()))):items.filter(n=>inStream(n,scope)),[items,savedOnly,reading.saved,domain,newsType,region,query,scope]);
- const events=useMemo(()=>clusterStories(pool),[pool]);
+ const events=useMemo(()=>!savedOnly&&clustered?clustered:clusterStories(pool),[pool,savedOnly,clustered]);
  const keys=(event:NewsEvent)=>event.reports.map(identity);
  const isSaved=(event:NewsEvent)=>reading.saved.some(n=>keys(event).includes(identity(n)));
  const isRead=(event:NewsEvent)=>keys(event).some(k=>reading.read.includes(k));
@@ -82,7 +83,7 @@ export function NewsFeed({items,domain,domainName,loading,query='',newsType='全
     <div className="event-number">{String(index+1).padStart(2,'0')}</div><div className="event-card-body">
      <div className="event-meta"><span className="event-publisher">{n.source}</span><span className={'source-tier tier-'+sourceTier(n)}>{t(tierLabels[sourceTier(n)])}</span><span>{t(scope==='world'?(worldTopic(n)||'其他动态'):n.type)}</span><time dateTime={event.latestDate}>{moment(event.latestDate)}</time>{n.stale&&<em><Localized value={"旧缓存"}/> </em>}{n.historical&&<em><Localized value={"资料库"}/> </em>}{readBefore&&<span><Check size={12}/><Localized value={"已读"}/> </span>}</div>
      <h3><a href={n.url} target="_blank" rel="noreferrer" onClick={()=>read(event)}><BilingualText text={n.title}/></a><ArrowUpRight size={17} aria-hidden/></h3>
-     <p className="event-summary"><BilingualText text={n.summary||'订阅源仅提供标题；尚无可用摘要，请打开原文核对。'}/></p>
+     {preferences.showSummaries&&<p className="event-summary"><BilingualText text={n.summary||'订阅源仅提供标题；尚无可用摘要，请打开原文核对。'}/></p>}
      <div className="event-reasons">{scoreReasons(n).slice(0,1).map(reason=><span key={reason}>{t(reason)}</span>)}<span>{event.sourceCount}<Localized value={"个关联来源"}/> </span>{sort==='heat'&&<span title="48 小时内同一来源只计一次，24 小时权重减半"><Flame size={12}/>{event.heat}<Localized value={"热度"}/> </span>}</div>
      <div className="event-bottom"><small><Localized value={"资料优先级"}/> {event.score}</small><button className={saved?'selected':''} onClick={()=>save(event)} aria-pressed={saved} aria-label={(saved?'取消收藏 ':'收藏 ')+n.title}><Bookmark size={15}/>{saved?t('已收藏'):t('收藏')}</button></div>
      <details className="event-sources"><summary>{event.sourceCount>1?t('另有报道，展开查看','More coverage'):t('原文与时间线','Sources & timeline')} · {event.reports.length} </summary><button className="event-timeline-sort" onClick={()=>setAscending(!ascending)}><Localized value={ascending?'改为最新在前':'改为最早在前'}/></button>{(ascending?[...event.reports].reverse():event.reports).map(report=><div key={report.url}><time>{moment(report.date)}</time><a href={report.url} target="_blank" rel="noreferrer" onClick={()=>read(event)}>{report.source} · {report.title}<ArrowUpRight size={12}/></a><small>{tierLabels[sourceTier(report)]}<Localized value={report.stale?' · 旧缓存':''}/></small></div>)}</details>

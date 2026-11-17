@@ -1,9 +1,10 @@
 'use client';
-import {useCallback,useEffect,useMemo,useRef,useState} from 'react';
+import {useCallback,useEffect,useMemo,useRef,useState,memo} from 'react';
 import {ArrowLeft,ArrowUpRight,CalendarDays,Check,ChevronLeft,ChevronRight,Clock3,Download,Globe2,History,RefreshCw,ShieldCheck,TrendingUp} from 'lucide-react';
 import {BilingualText,LanguageSwitch,useLanguage} from './language';
 import {categoryNames,type CalendarEvent,type CalendarPayload,type CalendarCategory} from '@/lib/calendar/types';
 import {beijingDay,addDays} from '@/lib/calendar/time';
+import {useReaderPreferences} from './reader-preferences';
 import {calendarTitle,eventsOnDay} from '@/lib/calendar/presentation';
 import './global-calendar.css';
 type Moved=CalendarEvent&{formerDay:string};
@@ -12,8 +13,8 @@ type Version={sequence:number;recorded_at:string;day:string;payload:CalendarEven
 const statusNames={scheduled:['已排期','Scheduled'],tentative:['暂定','Tentative'],published:['已有官方材料','Official material available'],cancelled:['已取消','Cancelled']} as const;
 const formatAt=(s?:string)=>s?new Intl.DateTimeFormat('zh-CN',{timeZone:'Asia/Shanghai',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hourCycle:'h23'}).format(new Date(s)):'—';
 const timeLabel=(e:CalendarEvent)=>e.startAt?new Intl.DateTimeFormat('en-GB',{timeZone:'Asia/Shanghai',hour:'2-digit',minute:'2-digit',hourCycle:'h23'}).format(new Date(e.startAt)):'';
-export function GlobalCalendar({embedded=false,active:visible=true,onBack,query=''}:{embedded?:boolean;active?:boolean;onBack?:()=>void;query?:string}){
- const {t}=useLanguage();
+export const GlobalCalendar=memo(function GlobalCalendar({embedded=false,active:visible=true,onBack,query=''}:{embedded?:boolean;active?:boolean;onBack?:()=>void;query?:string}){
+ const {t}=useLanguage(),{preferences}=useReaderPreferences();
  const [today,setToday]=useState(beijingDay()),[mode,setMode]=useState<'future'|'past'>('future'),[month,setMonth]=useState(beijingDay().slice(0,7));
  const [data,setData]=useState<Payload|null>(null),[selectedDay,setSelectedDay]=useState(beijingDay()),[selectedId,setSelectedId]=useState('');
  const [category,setCategory]=useState('all'),[region,setRegion]=useState('all'),[major,setMajor]=useState(false),[sourcePanel,setSourcePanel]=useState(false);
@@ -51,11 +52,11 @@ export function GlobalCalendar({embedded=false,active:visible=true,onBack,query=
   if(!visible)return;let alive=true;
   const key=mode==='past'?'month:'+month:'future:'+beijingDay(),saved=cache.current.get(key);
   setData(saved||null);setLoading(!saved);
-  void load().then(snapshot=>{if(alive)void refresh(false,snapshot);}).catch(e=>{if(alive)setError(e.message);}).finally(()=>{if(alive)setLoading(false);});
+  void load().then(snapshot=>{if(alive&&preferences.autoRefresh)void refresh(false,snapshot);}).catch(e=>{if(alive)setError(e.message);}).finally(()=>{if(alive)setLoading(false);});
   return()=>{alive=false;};
- },[visible,mode,month,load,refresh]);
+ },[visible,mode,month,load,refresh,preferences.autoRefresh]);
  useEffect(()=>{setSelectedId('');setDetail(null);detailRequest.current++;setSelectedDay(mode==='future'?today:month===today.slice(0,7)?today:month+'-01');},[mode,month,today]);
- useEffect(()=>{const onVisible=()=>{if(visibleRef.current&&document.visibilityState==='visible')void refresh(false);};document.addEventListener('visibilitychange',onVisible);return()=>document.removeEventListener('visibilitychange',onVisible);},[refresh]);
+ useEffect(()=>{const onVisible=()=>{if(preferences.autoRefresh&&visibleRef.current&&document.visibilityState==='visible')void refresh(false);};document.addEventListener('visibilitychange',onVisible);return()=>document.removeEventListener('visibilitychange',onVisible);},[refresh,preferences.autoRefresh]);
  const filtered=useMemo(()=>(data?.events||[]).filter(e=>(category==='all'||e.category===category)&&(region==='all'||(region==='中国'?e.region==='中国':e.region!=='中国'))&&(!major||e.importance==='major')&&(!query.trim()||[e.title,calendarTitle(e),e.summary,e.country,e.sourceName,...(e.relatedEvents||[]).map(member=>member.title)].join(' ').toLowerCase().includes(query.trim().toLowerCase()))).sort((a,b)=>a.day.localeCompare(b.day)||(a.startAt||'99').localeCompare(b.startAt||'99')||Number(b.importance==='major')-Number(a.importance==='major')),[data,category,region,major,query]);
  const days=useMemo(()=>{if(mode==='future')return Array.from({length:7},(_,i)=>addDays(today,i));const start=month+'-01',count=new Date(Number(month.slice(0,4)),Number(month.slice(5,7)),0).getDate();return Array.from({length:count},(_,i)=>addDays(start,i));},[mode,month,today]);
  const dayEvents=eventsOnDay(filtered,selectedDay),moved=(data?.moved||[]).filter(e=>e.formerDay===selectedDay);
@@ -102,4 +103,4 @@ export function GlobalCalendar({embedded=false,active:visible=true,onBack,query=
    <details className="gc-notes"><summary>{t('时间口径、归档与参考日历','Time, archives & reference calendars')}</summary><p><a href="https://www.consilium.europa.eu/en/meetings/calendar/" target="_blank" rel="noreferrer">{t('欧盟理事会官方日历 ↗','EU Council official calendar ↗')}</a> · {t('自动采集访问受限，仅作参考入口，不计入自动来源。','Automated access restricted; reference link only, excluded from automatic source counts.')}</p><p>{t('历史从 2026 年 11 月起持续保存，不设置滚动删除期限；历史补录仅包括能够核验到的记录，并非完整全球档案。','Records persist from November 2026 without rolling deletion. Historical backfill includes verifiable entries, not a complete global archive.')}</p><p>{t('精确时刻转换为北京时间；只有日期的排期保留原站日期。重大标签用于阅读排序，不代表投资建议或结果预测。','Exact timestamps use Beijing time. Date-only schedules retain their source date. Major labels indicate reading priority, not forecasts.')}</p></details>
   </div>
  </div>;
-}
+},(previous,next)=>previous.active===false&&next.active===false);

@@ -11,7 +11,7 @@ for(let attempt=1;attempt<=6;attempt++){
  if(attempt===6)throw Error('health endpoint invalid: status='+health.status+', content-type='+contentType+', location='+String(health.headers.get('location')));
  await new Promise(r=>setTimeout(r,1500));
 }
-must(info?.ok&&info?.authConfigured&&info?.version==='4.4.0'&&info?.settingsStorage,'health, auth or KV settings configuration failed');
+must(info?.ok&&info?.authConfigured&&info?.version==='4.5.0'&&info?.settingsStorage,'health, auth or KV settings configuration failed');
 for(const path of ['/','/calendar','/settings','/case-study','/read/a04','/aidc.jpg']){
  const r=await request(path);
  must(r.status===302&&r.headers.get('location')?.startsWith('/auth/login'),'anonymous path is not protected: '+path);
@@ -35,14 +35,18 @@ if(process.env.ATLAS_ACCESS_PASSWORD){
   must(loginCookie,'session cookie missing');
   must(loginCookie.includes('Max-Age=604800'),'session cookie is not configured for seven days');
   const cookie=loginCookie.split(';')[0];
-  for(const [path,marker] of [['/','知域'],['/settings','网站设置'],['/case-study','1 MW'],['/read/a04','液冷'],['/?view=world','世界热点']]){
+  for(const [path,marker] of [['/','知域'],['/case-study','1 MW'],['/read/a04','液冷'],['/?view=world','世界热点']]){
    const r=await request(path,{headers:{Cookie:cookie}});
    must(r.ok,'authenticated route failed: '+path+' status='+r.status+' location='+String(r.headers.get('location')));
    must((await r.text()).includes(marker),'route content missing: '+path);
   }
+  const legacySettings=await request('/settings',{headers:{Cookie:cookie}});
+  must([302,303,307,308].includes(legacySettings.status)&&legacySettings.headers.get('location')?.includes('settings=1'),'settings must open in the portal');
+  const settingsPortal=await request('/?domain=aidc&view=world&settings=1',{headers:{Cookie:cookie}});
+  const settingsHtml=await settingsPortal.text();must(settingsPortal.ok&&settingsHtml.includes('settings-nav-link')&&settingsHtml.includes('source-picker-trigger'),'settings and multi-source entry points missing');
   const admin=await request('/api/admin/settings',{headers:{Cookie:cookie}});
   const settings=await admin.json();
-  must(admin.ok&&settings.settings&&settings.sessionDays===7&&settings.storage==='cloudflare-kv','admin settings API contract failed');
+  must(admin.ok&&settings.settings&&settings.sessionDays===7&&settings.storage==='cloudflare-kv'&&typeof settings.settings.enableAutoTranslation==='boolean','admin settings API contract failed');
   const noReauth=await request('/api/admin/settings',{method:'POST',headers:{Cookie:cookie,Origin:origin,'Content-Type':'application/json'},body:JSON.stringify({settings:settings.settings})});
   must(noReauth.status===403,'settings mutation accepted without current-password confirmation');
   const home=await request('/',{headers:{Cookie:cookie}});

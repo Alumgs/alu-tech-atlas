@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
+import {ReaderPreferencesProvider} from '@/components/reader-preferences';
 import {LanguageProvider} from "@/components/language";
 
 export const viewport: Viewport = { width: "device-width", initialScale: 1, viewportFit: "cover", themeColor: "#142c3e" };
@@ -20,7 +21,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="zh-CN">
-      <body className="antialiased"><LanguageProvider>{children}</LanguageProvider></body>
+      <body className="antialiased"><ReaderPreferencesProvider><LanguageProvider>{children}</LanguageProvider></ReaderPreferencesProvider></body>
     </html>
   );
 }
