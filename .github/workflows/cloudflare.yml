@@ -77,3 +77,12 @@ jobs:
           ATLAS_BASE_URL: ${{ vars.ATLAS_BASE_URL || 'https://alu-tech-atlas.alumgs-lab-b74ee9.workers.dev' }}
           ATLAS_ACCESS_PASSWORD: ${{ secrets.ATLAS_ACCESS_PASSWORD }}
         run: node scripts/smoke.mjs
+      - name: Install Chromium for authenticated UI regression
+        timeout-minutes: 10
+        run: pnpm exec playwright install --with-deps chromium
+      - name: Verify browser interactions and warm navigation
+        timeout-minutes: 5
+        env:
+          ATLAS_BASE_URL: ${{ vars.ATLAS_BASE_URL || 'https://alu-tech-atlas.alumgs-lab-b74ee9.workers.dev' }}
+          ATLAS_ACCESS_PASSWORD: ${{ secrets.ATLAS_ACCESS_PASSWORD }}
+        run: pnpm test:browser
