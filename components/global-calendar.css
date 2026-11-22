@@ -4,3 +4,16 @@
 @media(prefers-reduced-motion:reduce){.gc-spin{animation:none}.global-calendar *{transition:none}}
 
 .gc-cat-market{border-color:#a15f27!important}.global-calendar .gc-mode{flex-wrap:wrap}.global-calendar .gc-mode button{white-space:nowrap}
+
+.gc-event-focus{
+ margin:2px 0 5px;
+ color:var(--gc-muted);
+ font-size:12px;
+ line-height:1.55;
+ overflow-wrap:anywhere;
+}
+.gc-event-focus strong{
+ margin-inline-end:4px;
+ color:var(--gc-ink);
+ font-weight:600;
+}

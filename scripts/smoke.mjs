@@ -11,7 +11,7 @@ for(let attempt=1;attempt<=6;attempt++){
  if(attempt===6)throw Error('health endpoint invalid: status='+health.status+', content-type='+contentType+', location='+String(health.headers.get('location')));
  await new Promise(r=>setTimeout(r,1500));
 }
-must(info?.ok&&info?.authConfigured&&info?.version==='4.6.0'&&info?.settingsStorage,'health, auth or KV settings configuration failed');
+must(info?.ok&&info?.authConfigured&&info?.version==='4.6.1'&&info?.settingsStorage,'health, auth or KV settings configuration failed');
 for(const path of ['/','/calendar','/settings','/case-study','/read/a04','/aidc.jpg']){
  const r=await request(path);
  must(r.status===302&&r.headers.get('location')?.startsWith('/auth/login'),'anonymous path is not protected: '+path);
@@ -104,7 +104,7 @@ if(process.env.ATLAS_ACCESS_PASSWORD){
   must(nextWeek.ok&&preview.coverage.length===7&&new Date(preview.from+'T00:00:00Z').getUTCDay()===1,'calendar next-week range must start Monday and contain seven days');
   if(preview.from==='2026-11-23'){
    must(preview.coverage.every(day=>day.total>0),'weekly agenda has an uncovered date');
-   for(const marker of ['PMI','主动 ETF','小米','美团','氢氧化锂','高交会','西班牙','OPEC+']){
+   for(const marker of ['PMI','主动 ETF','小米','美团','氢氧化锂','高交会','西班牙','OPEC+','芝加哥联储全国活动指数','东盟周','消费者信心指数','初请失业金','原油库存周报','M3 与信贷数据','国内成品油调价窗口','东京都区部 CPI']){
     must(preview.events.some(event=>event.title.includes(marker)),'verified weekly event missing: '+marker);
    }
    console.log('Next-week verified:',JSON.stringify({from:preview.from,to:preview.to,count:preview.events.length,china:preview.events.filter(event=>event.region==='中国').length,notices:preview.events.filter(event=>event.verifiedOn).length,daily:preview.coverage.map(day=>day.total),addedFeeds:preview.sources.filter(source=>['fed-events','nyse','census','dell','adi','li-auto'].includes(source.id)).map(source=>({id:source.id,ok:source.state?.ok,entries:preview.events.filter(event=>event.sourceId===source.id).length}))}));

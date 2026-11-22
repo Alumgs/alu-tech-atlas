@@ -88,6 +88,19 @@ try{
  await page.getByRole('button',{name:'下周',exact:true}).click();
  const nextWeekPayload=await (await nextWeekResponse).json();
  assert.equal(nextWeekPayload.coverage.length,7);assert.equal(new Date(nextWeekPayload.from+'T00:00:00Z').getUTCDay(),1);
+ const agenda=page.locator('.gc-agenda');
+ await agenda.locator('.gc-event-focus').first().waitFor();
+ assert.equal(await agenda.locator('.gc-event-focus').count(),await agenda.locator('.gc-event').count());
+ if(nextWeekPayload.from==='2026-11-23'){
+  const etf=agenda.locator('.gc-event').filter({hasText:'沪深首批主动 ETF'});
+  await etf.locator('.gc-event-focus').waitFor();
+  assert.match(await etf.locator('.gc-event-focus').innerText(),/关注.*折溢价/);
+  await page.locator('.site-header').getByRole('button',{name:'EN',exact:true}).click();
+  await page.waitForFunction(()=>document.documentElement.lang==='en');
+  assert.match(await etf.locator('.gc-event-focus').innerText(),/Focus.*first-day turnover/);
+  await page.locator('.site-header').getByRole('button',{name:'中文',exact:true}).click();
+  await page.waitForFunction(()=>document.documentElement.lang==='zh-CN');
+ }
  await page.getByRole('button',{name:'未来七天',exact:true}).click();
 
  await nav.getByRole('button',{name:'世界热点',exact:true}).click();await page.locator('main.view-world .source-picker-trigger:visible').waitFor();
