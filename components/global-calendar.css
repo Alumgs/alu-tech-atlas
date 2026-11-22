@@ -17,3 +17,5 @@
  color:var(--gc-ink);
  font-weight:600;
 }
+
+.gc-sources h3{margin:12px 0 3px;font-size:12px;font-weight:650;color:var(--gc-ink)}

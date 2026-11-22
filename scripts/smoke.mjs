@@ -11,7 +11,7 @@ for(let attempt=1;attempt<=6;attempt++){
  if(attempt===6)throw Error('health endpoint invalid: status='+health.status+', content-type='+contentType+', location='+String(health.headers.get('location')));
  await new Promise(r=>setTimeout(r,1500));
 }
-must(info?.ok&&info?.authConfigured&&info?.version==='4.6.1'&&info?.settingsStorage,'health, auth or KV settings configuration failed');
+must(info?.ok&&info?.authConfigured&&info?.version==='4.6.2'&&info?.settingsStorage,'health, auth or KV settings configuration failed');
 for(const path of ['/','/calendar','/settings','/case-study','/read/a04','/aidc.jpg']){
  const r=await request(path);
  must(r.status===302&&r.headers.get('location')?.startsWith('/auth/login'),'anonymous path is not protected: '+path);
@@ -89,12 +89,16 @@ if(process.env.ATLAS_ACCESS_PASSWORD){
   const calendarPortal=await request('/?domain=aidc&view=calendar',{headers:{Cookie:cookie}});
   const calendarHtml=await calendarPortal.text();
   must(calendarPortal.ok&&calendarHtml.includes('gc-titlebar')&&!calendarHtml.includes('class="gc-hero"'),'compact calendar first render failed');
-  for(const sources of [['fed-events','nyse','census'],['dell','adi','li-auto'],['nbs','bls','bea'],['fed','ecb','elections'],['nvidia','microsoft','eurostat'],['boe','boj','meta'],['amazon','amd'],['jd','netease','baidu'],['pdd','alibaba','tencent'],['apec','gov-policy','lpr'],['nato-pa']]){
+  for(const sources of [['cfnai','ecb-m3','tokyo-cpi'],['conference-board-confidence','dol-claims','eia-petroleum'],['fed-events','nyse','census'],['dell','adi','li-auto'],['nbs','bls','bea'],['fed','ecb','elections'],['nvidia','microsoft','eurostat'],['boe','boj','meta'],['amazon','amd'],['jd','netease','baidu'],['pdd','alibaba','tencent'],['apec','gov-policy','lpr'],['nato-pa']]){
    const r=await request('/api/calendar/refresh',{method:'POST',headers:{Cookie:cookie,Origin:origin,'Content-Type':'application/json'},body:JSON.stringify({sources,force:true}),signal:AbortSignal.timeout(90000)});
    const d=await r.json();must(r.ok&&Array.isArray(d.results),'calendar refresh contract failed');console.log('Calendar source status:',JSON.stringify(d.results));
   }
   const calendar=await request('/api/calendar',{headers:{Cookie:cookie}}),agenda=await calendar.json();
   must(calendar.ok&&agenda.storage==='cloudflare-d1'&&Array.isArray(agenda.events)&&agenda.events.length>0,'persistent calendar empty or invalid');
+  const promotedSources=['cfnai','ecb-m3','tokyo-cpi','conference-board-confidence','dol-claims','eia-petroleum'];
+  must(promotedSources.every(id=>agenda.sources.some(source=>source.id===id)),'new automatic sources missing from catalog');
+  must(['cq-asean','ndrc-fuel'].every(id=>agenda.referenceSources.some(source=>source.id===id)),'manual sources missing from catalog');
+  console.log('New calendar source checks:',JSON.stringify(agenda.sources.filter(source=>promotedSources.includes(source.id)).map(source=>({id:source.id,...source.state}))));
   const windowDays=(Date.parse(agenda.to)-Date.parse(agenda.from))/86400000;
   must(windowDays===6,'calendar forward range must be seven inclusive days');
   must(Array.isArray(agenda.coverage)&&agenda.coverage.length===7,'daily coverage missing');

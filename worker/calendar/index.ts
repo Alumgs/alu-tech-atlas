@@ -1,6 +1,6 @@
 import {groupCalendarEvents} from '../../lib/calendar/presentation.ts';
 import {nbsResultLink,resultEvidence} from './results.ts';
-import {calendarSources} from '../../lib/calendar/sources.ts';
+import {calendarReferenceSources,calendarSources} from '../../lib/calendar/sources.ts';
 import {parseCalendar,calendarEvent,clean,englishDate,governmentPolicy} from '../../lib/calendar/parsers.ts';
 import {beijingDay,addDays,calendarWindow,ARCHIVE_START,localInstant} from '../../lib/calendar/time.ts';
 import type {CalendarEvent,CalendarSource} from '../../lib/calendar/types';
@@ -89,7 +89,7 @@ async function collect(source:CalendarSource){
   if(source.id!=='nbs'||!today.startsWith('2026-'))throw error;
   events=parseCalendar(await sourceText(nbsFallback,[new URL(source.url).origin]),{...source,url:nbsFallback});
  }
- if(!events.length&&!/<rss\b/i.test(raw))throw Error('未识别到有效日程，需核查源站格式');
+ if(!events.length&&source.id!=='ecb-m3'&&!/<rss\b/i.test(raw))throw Error('未识别到有效日程，需核查源站格式');
  if(source.parser==='q4')await enrichQ4(events,source);
  // Upcoming FOMC minutes are separately stated by the Fed; do not infer them from a fixed recurrence.
  if(source.id==='fed'){
@@ -163,7 +163,7 @@ export async function calendarApi(request:Request,env:CalendarEnv){
   const today=beijingDay(),window=calendarWindow(url.searchParams.get('month'),today,url.searchParams.get('period')==='next-week'),[data,status]=await Promise.all([listEvents(db,window.from,window.to),states(db)]);
   const months=await db.prepare('SELECT DISTINCT substr(day,1,7) AS month FROM calendar_events WHERE day>=? AND day<=? ORDER BY month DESC').bind(ARCHIVE_START,today).all<{month:string}>();
   const grouped=groupCalendarEvents(data.events),coverage=Array.from({length:Math.round((Date.parse(window.to)-Date.parse(window.from))/86400000)+1},(_,i)=>{const day=addDays(window.from,i),events=grouped.filter(e=>e.day<=day&&(e.endDay||e.day)>=day);return {day,total:events.length,starting:events.filter(e=>e.day===day).length,ongoing:events.filter(e=>e.day<day).length};});
-  return json({...data,events:grouped,coverage,rawCount:data.events.length,mergedCount:data.events.length-grouped.length,...window,today,archiveStart:ARCHIVE_START,storage:'cloudflare-d1',months:months.results.map(x=>x.month),sources:calendarSources.map(s=>({...s,state:status.find(x=>x.source_id===s.id)}))});
+  return json({...data,events:grouped,coverage,rawCount:data.events.length,mergedCount:data.events.length-grouped.length,...window,today,archiveStart:ARCHIVE_START,storage:'cloudflare-d1',months:months.results.map(x=>x.month),referenceSources:calendarReferenceSources,sources:calendarSources.map(s=>({...s,state:status.find(x=>x.source_id===s.id)}))});
  }catch(error){console.error(JSON.stringify({event:'calendar_api',error:String(error)}));return json({error:error instanceof Error?error.message:'读取日历失败。'},url.searchParams.has('month')?400:503);}
 }
 export async function importVerifiedNotices(db:D1Database){

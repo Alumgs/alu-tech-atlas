@@ -1,5 +1,5 @@
 import type {CalendarSource,CalendarEvent} from './types';
-import {beijingDay,localInstant,validDay,ARCHIVE_START} from './time.ts';
+import {beijingDay,addDays,localInstant,validDay,ARCHIVE_START} from './time.ts';
 import {publicUrl} from '../url-safety.ts';
 export function clean(s:string){return s.replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi,' ').replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi,' ').replace(/<[^>]*>/g,' ').replace(/&nbsp;|&#160;/gi,' ').replace(/&amp;/gi,'&').replace(/&quot;|&#34;/gi,'"').replace(/&#39;|&#x27;/gi,"'").replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/\s+/g,' ').trim();}
 const months=['January','February','March','April','May','June','July','August','September','October','November','December'];
@@ -265,9 +265,94 @@ function dell(raw:string,source:CalendarSource){
  });
 }
 
+function chicagoActivity(raw:string,source:CalendarSource){
+ const body=raw.match(/<tbody\b[^>]*data-name="Chicago Fed National Activity Index[^"]*"[^>]*>([\s\S]*?)<\/tbody>/i)?.[1];
+ if(!body)throw Error('芝加哥联储未返回 CFNAI 排期表');
+ return tableGrid(body).flatMap(([date,period])=>{
+  const day=englishDate(date||''),month=months.findIndex(value=>period?.startsWith(value))+1;
+  const year=period?.match(/20\d{2}/)?.[0];
+  if(!validDay(day)||!month||!year)return [];
+  const key='cfnai-'+year+'-'+pad(month);
+  return [{...base(source,key,'美国 '+month+' 月芝加哥联储全国活动指数 / Chicago Fed National Activity Index',day,'08:30'),importance:'major' as const}];
+ });
+}
+
+function tokyoPrices(raw:string,source:CalendarSource){
+ const table=(raw.match(/<table\b[^>]*>[\s\S]*?<\/table>/gi)||[]).find(item=>/Ku-area of Tokyo/i.test(item));
+ const firstYear=Number(clean(table||'').match(/20\d{2}/)?.[0]);
+ if(!table||!firstYear)throw Error('日本统计局未返回东京 CPI 排期表');
+ let year=firstYear;
+ return tableGrid(table).flatMap(row=>{
+  const [, ,period,date]=row;
+  const month=months.findIndex(value=>period?.startsWith(value))+1;
+  if(!month||!date)return [];
+  year=Number(period.match(/20\d{2}/)?.[0]||year);
+  const day=englishDate(date,year);
+  if(!validDay(day))return [];
+  return [base(source,'tokyo-cpi-'+year+'-'+pad(month),'日本 '+month+' 月东京都区部 CPI 初值 / Tokyo CPI',day,'08:30')];
+ });
+}
+
+function ecbMoney(raw:string,source:CalendarSource){
+ const text=clean(raw);
+ if(!/Weekly schedule of public speaking engagements and other activities/i.test(text))throw Error('欧洲央行未返回官方周历');
+ return [...raw.matchAll(/<dt\b[^>]*>([\s\S]*?)<\/dt>\s*<dd\b[^>]*>([\s\S]*?)<\/dd>/gi)].flatMap(([,date,body])=>{
+  if(!/Monetary developments in the euro area/i.test(clean(body)))return [];
+  const stamp=clean(date).match(/\b(\d{1,2})\s+([A-Za-z]+)\s+(20\d{2})\b/);
+  const day=stamp?englishDate(stamp[2]+' '+stamp[1],Number(stamp[3])):'';
+  const time=clean(body).match(/Time:\s*(\d{1,2}:\d{2})/i)?.[1];
+  if(!validDay(day)||!time)throw Error('欧洲央行 M3 公布时点无法解析');
+  return [{...base(source,'ecb-m3-'+day.slice(0,7),'欧元区 M3 与信贷数据 / Euro area M3 and credit',day,time),importance:'major' as const}];
+ });
+}
+
+function consumerConfidence(raw:string,source:CalendarSource){
+ const text=clean(raw);
+ const previous=text.match(/Source:\s*([A-Za-z]+)\s+(20\d{2})\s+Consumer Confidence Survey/i);
+ const next=text.match(/The next release is\s+([A-Za-z]+),\s+([A-Za-z]+)\s+(\d{1,2})(?:st|nd|rd|th)?(?:,?\s+(20\d{2}))?\s+at\s+(\d{1,2}(?::\d{2})?\s*[ap]\.?m\.?)\s+ET\b/i);
+ if(!previous||!next)throw Error('谘商会未返回可核对的发布日期');
+ const [,weekday,month,date,explicitYear,clock]=next;
+ const year=Number(explicitYear||previous[2])+(explicitYear||months.indexOf(month)>months.indexOf(previous[1])?0:1);
+ const day=englishDate(month+' '+date,year);
+ const time=releaseTime(clock.replace(/^(\d{1,2})(?!\d|:)/,'$1:00'));
+ if(!validDay(day)||!time||new Date(day+'T12:00:00Z').toLocaleDateString('en-US',{weekday:'long',timeZone:'UTC'})!==weekday)throw Error('谘商会排期日期与星期不一致');
+ return [base(source,'conference-board-confidence-'+day.slice(0,7),'美国 '+Number(day.slice(5,7))+' 月谘商会消费者信心指数 / US Consumer Confidence Index',day,time)];
+}
+
+function weeklyUsRelease(raw:string,source:CalendarSource){
+ const claims=source.parser==='dol-claims';
+ const text=clean(raw);
+ const standard=claims?text.match(/published each week on Thursday morning at (\d{1,2}:\d{2}\s*[ap]m) EST/i):text.match(/standard release time and day of the week will be at (\d{1,2}:\d{2}\s*[ap]\.m\.) eastern time on Wednesday/i);
+ const table=(raw.match(/<table\b[^>]*>[\s\S]*?<\/table>/gi)||[]).find(item=>{
+  const heading=clean(item);
+  return claims?/Release Date Release Time/i.test(heading):/Data for the week ending Alternate release date/i.test(heading);
+ });
+ if(!standard||!table)throw Error('周报缺少常规发布时间或节假日排期');
+ const time=releaseTime(standard[1]),exceptions=new Map<string,{day:string;time:string}>();
+ for(const row of tableGrid(table).slice(1)){
+  const day=englishDate(row[claims?0:1]||''),at=releaseTime(row[claims?1:3]||'');
+  if(!validDay(day)||!at)continue;
+  const weekday=new Date(day+'T12:00:00Z').getUTCDay();
+  const dataDate=englishDate(row[0]||'');
+  if(!claims&&!validDay(dataDate))continue;
+  const original=claims?addDays(day,4-weekday):addDays(dataDate,5);
+  exceptions.set(original,{day,time:at});
+ }
+ const events:CalendarEvent[]=[];
+ const now=beijingDay();
+ for(let offset=0;offset<=15;offset++){
+  const regular=addDays(now,offset);
+  if(new Date(regular+'T12:00:00Z').getUTCDay()!==(claims?4:3))continue;
+  const {day,time:at}=exceptions.get(regular)||{day:regular,time};
+  const title=claims?'美国上周初请失业金人数 / US initial jobless claims':'美国 EIA 原油库存周报 / EIA Weekly Petroleum Status Report';
+  events.push({...base(source,source.id+'-'+regular,title,day,at),importance:'major'});
+ }
+ return events;
+}
+
 export function parseCalendar(raw:string,source:CalendarSource):CalendarEvent[]{
  let events:CalendarEvent[]=[];
- switch(source.parser){case 'fed-events':events=fedEvents(raw,source);break;case 'nyse':events=nyse(raw,source);break;case 'census':events=census(raw,source);break;case 'dell':events=dell(raw,source);break;case 'nato':events=nato(raw,source);break;case 'lpr':events=lprWindow(raw,source);break;case 'china-ir':events=chinaIr(raw,source);break;case 'alibaba':events=alibaba(raw,source);break;case 'tencent':events=tencent(raw,source);break;case 'apec':events=apec(raw,source);break;case 'gov-policy':events=governmentPolicy(raw,source);break;case 'ics':events=ics(raw,source);break;case 'nbs':events=nbs(raw,source);break;case 'bea':events=bea(raw,source);break;case 'fed':events=fed(raw,source);break;case 'ecb':events=ecb(raw,source);break;case 'elections':events=elections(raw,source);break;case 'microsoft':events=microsoft(raw,source);break;case 'eurostat':events=eurostat(raw,source);break;case 'q4':events=q4(raw,source);break;case 'boe':events=boe(raw,source);break;case 'boj':events=boj(raw,source);break;case 'amd':events=amd(raw,source);break;default:throw Error('该来源需专用活动适配器');}
+ switch(source.parser){case 'cfnai':events=chicagoActivity(raw,source);break;case 'tokyo-cpi':events=tokyoPrices(raw,source);break;case 'ecb-m3':events=ecbMoney(raw,source);break;case 'consumer-confidence':events=consumerConfidence(raw,source);break;case 'dol-claims':case 'eia-petroleum':events=weeklyUsRelease(raw,source);break;case 'fed-events':events=fedEvents(raw,source);break;case 'nyse':events=nyse(raw,source);break;case 'census':events=census(raw,source);break;case 'dell':events=dell(raw,source);break;case 'nato':events=nato(raw,source);break;case 'lpr':events=lprWindow(raw,source);break;case 'china-ir':events=chinaIr(raw,source);break;case 'alibaba':events=alibaba(raw,source);break;case 'tencent':events=tencent(raw,source);break;case 'apec':events=apec(raw,source);break;case 'gov-policy':events=governmentPolicy(raw,source);break;case 'ics':events=ics(raw,source);break;case 'nbs':events=nbs(raw,source);break;case 'bea':events=bea(raw,source);break;case 'fed':events=fed(raw,source);break;case 'ecb':events=ecb(raw,source);break;case 'elections':events=elections(raw,source);break;case 'microsoft':events=microsoft(raw,source);break;case 'eurostat':events=eurostat(raw,source);break;case 'q4':events=q4(raw,source);break;case 'boe':events=boe(raw,source);break;case 'boj':events=boj(raw,source);break;case 'amd':events=amd(raw,source);break;default:throw Error('该来源需专用活动适配器');}
  const unique=new Map<string,CalendarEvent>();for(const e of events){if(e.day>=ARCHIVE_START&&e.title&&publicUrl(e.url)){if(source.parser!=='china-ir'||unique.get(e.key)?.status!=='published'||e.status==='published')unique.set(e.key,e);}}return [...unique.values()];
 }
 export {base as calendarEvent};

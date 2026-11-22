@@ -1,5 +1,11 @@
-import type {CalendarSource} from './types';
+import type {CalendarReferenceSource,CalendarSource} from './types';
 export const calendarSources:CalendarSource[]=[
+ {id:'cfnai',name:'芝加哥联储 CFNAI',url:'https://www.chicagofed.org/research/data/data-release-calendar',parser:'cfnai',region:'美洲',country:'美国',timezone:'America/New_York',level:'official',note:'读取全国活动指数的官方日历。',category:'macro'},
+ {id:'conference-board-confidence',name:'美国谘商会消费者信心',url:'https://www.conference-board.org/topics/consumer-confidence/',parser:'consumer-confidence',region:'美洲',country:'美国',timezone:'America/New_York',level:'institutional',note:'读取指数发布机构公布的下次发布时点。',category:'macro'},
+ {id:'dol-claims',name:'美国劳工部初请失业金',url:'https://oui.doleta.gov/unemploy/archive.asp',parser:'dol-claims',region:'美洲',country:'美国',timezone:'America/New_York',level:'official',note:'按美国劳工部的周报规则及节假日前移表滚动排期。',category:'macro'},
+ {id:'eia-petroleum',name:'美国能源信息署 EIA 石油周报',url:'https://www.eia.gov/petroleum/supply/weekly/schedule.php',parser:'eia-petroleum',region:'美洲',country:'美国',timezone:'America/New_York',level:'official',note:'按 EIA 常规发布时间及节假日例外表滚动排期。',category:'macro'},
+ {id:'ecb-m3',name:'欧洲央行 ECB 货币与信贷',url:'https://www.ecb.europa.eu/press/calendars/weekly/html/index.en.html',parser:'ecb-m3',region:'欧洲',country:'欧元区',timezone:'Europe/Berlin',level:'official',note:'从 ECB 官方周历读取 M3 与信贷的发布时点。',category:'macro'},
+ {id:'tokyo-cpi',name:'日本总务省统计局东京 CPI',url:'https://www.stat.go.jp/english/data/cpi/1582.html',parser:'tokyo-cpi',region:'亚太',country:'日本',timezone:'Asia/Tokyo',level:'official',note:'读取官方日历的东京都区部 CPI 初值日期。',category:'macro'},
  {id:'nbs',name:'国家统计局',url:'https://www.stats.gov.cn/sj/fbrc/bnxxfb/',parser:'nbs',category:'macro',region:'中国',country:'中国',timezone:'Asia/Shanghai',level:'official',note:'年度统计信息发布日程；日期为初步计划，可能调整。'},
  {id:'bls',name:'美国劳工统计局 BLS',url:'https://www.bls.gov/schedule/news_release/bls.ics',parser:'ics',category:'macro',region:'美洲',country:'美国',timezone:'America/New_York',level:'official',note:'官方 iCalendar：CPI、就业、PPI 等；云端直连受限时，独立定时任务同步原站日历。'},
  {id:'bea',name:'美国经济分析局 BEA',url:'https://www.bea.gov/news/schedule',parser:'bea',category:'macro',region:'美洲',country:'美国',timezone:'America/New_York',level:'official',note:'GDP、个人收入及支出等官方排期。'},
@@ -30,4 +36,9 @@ export const calendarSources:CalendarSource[]=[
  {id:'nato-pa',name:'北约议会大会 NATO PA',url:'https://www.nato-pa.int/agenda',parser:'nato',category:'politics',region:'欧洲',country:'欧洲',timezone:'Europe/Berlin',level:'official',note:'议会大会官方议程；跨日会议按实际起止日期展示，不等同于北约领导人峰会。'},
  {id:'apec',name:'APEC 官方日程',url:'https://www.apec.org/',parser:'apec',category:'politics',region:'全球',country:'全球',timezone:'Asia/Shanghai',level:'official',note:'官方活动日期、举办地与跨日区间；中国承办活动纳入中国区。'},
  {id:'gov-policy',name:'中国政府网政策文件',url:'https://www.gov.cn/pushinfo/v150203/rss.xml',parser:'gov-policy',category:'policy',region:'中国',country:'中国',timezone:'Asia/Shanghai',level:'official',note:'检查最新政策原文，仅提取明确写出的生效日期；发文日不冒充生效日。'},
+];
+
+export const calendarReferenceSources:CalendarReferenceSource[]=[
+ {id:'cq-asean',name:'重庆市政府新闻发布会',url:'https://www.cqnews.net/app/content_1571911169945731072.html',note:'中国—东盟周等单次活动根据发布会核对入库。'},
+ {id:'ndrc-fuel',name:'国家发展改革委成品油调价公告',url:'https://www.ndrc.gov.cn/xwdt/xwfb/',note:'根据公告核对调价。规则推算的窗口标为暂定。'},
 ];

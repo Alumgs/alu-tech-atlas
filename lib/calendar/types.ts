@@ -11,6 +11,7 @@ export type CalendarEvent={
  relatedEvents?:CalendarEvent[];
  firstSeen?:string;lastChecked?:string;updatedAt?:string;revision?:string;
 };
-export type CalendarSource={id:string;name:string;url:string;parser:'ics'|'nbs'|'bea'|'fed'|'ecb'|'elections'|'q4'|'microsoft'|'eurostat'|'boe'|'boj'|'amd'|'china-ir'|'alibaba'|'tencent'|'apec'|'gov-policy'|'lpr'|'nato'|'fed-events'|'nyse'|'census'|'dell';category:CalendarCategory;region:string;country:string;timezone:string;level:'official'|'institutional';note:string};
+export type CalendarSource={id:string;name:string;url:string;parser:'cfnai'|'tokyo-cpi'|'ecb-m3'|'consumer-confidence'|'dol-claims'|'eia-petroleum'|'ics'|'nbs'|'bea'|'fed'|'ecb'|'elections'|'q4'|'microsoft'|'eurostat'|'boe'|'boj'|'amd'|'china-ir'|'alibaba'|'tencent'|'apec'|'gov-policy'|'lpr'|'nato'|'fed-events'|'nyse'|'census'|'dell';category:CalendarCategory;region:string;country:string;timezone:string;level:'official'|'institutional';note:string};
 export type SourceState={source_id:string;attempted_at:string|null;success_at:string|null;ok:number;count:number;error:string|null};
-export type CalendarPayload={events:CalendarEvent[];sources:Array<CalendarSource&{state?:SourceState}>;today:string;from:string;to:string;archiveStart:string;storage:string};
+export type CalendarReferenceSource={id:string;name:string;url:string;note:string};
+export type CalendarPayload={events:CalendarEvent[];sources:Array<CalendarSource&{state?:SourceState}>;referenceSources:CalendarReferenceSource[];today:string;from:string;to:string;archiveStart:string;storage:string};

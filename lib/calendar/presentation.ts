@@ -1,6 +1,14 @@
 import type {CalendarEvent} from './types';
 const normalize=(value:string)=>value.normalize('NFKC').toLowerCase().replace(/[\p{P}\p{Z}\s]/gu,'');
+const noticeAliases:Record<string,string>={
+ 'dol-claims-2026-11-25':'dol-claims-2026-11-26',
+ 'ecb-m3-2026-10':'ecb-m3-2026-11',
+};
+const promotedSourceIds=new Set(['cfnai','tokyo-cpi','ecb-m3','conference-board-confidence','dol-claims','eia-petroleum']);
+
 export function calendarGroupKey(e:CalendarEvent){
+ const key=noticeAliases[e.key]&&e.sourceId==='verified-notices'?noticeAliases[e.key]:e.key;
+ if(promotedSourceIds.has(e.sourceId)||(e.sourceId==='verified-notices'&&[...promotedSourceIds].some(id=>key.startsWith(id+'-'))))return 'release|'+key;
  if(e.category==='politics'&&(/^(Spain|西班牙)$/i.test(e.country))&&/general election|议会大选/i.test(e.title))return 'spain-general-election|'+e.day;
  // Explicit activity family only. Other events retain dates, times and periods.
  if(e.sourceId==='alibaba'&&e.key.startsWith('earnings:'))return [e.sourceId,e.key.replace(/:call$/,''),e.day].join('|');
@@ -13,7 +21,8 @@ export function groupCalendarEvents(input:CalendarEvent[]):CalendarEvent[]{
   const key=calendarGroupKey(event);groups.set(key,[...(groups.get(key)||[]),event]);
  }
  return [...groups.values()].map(members=>{
-  members.sort((a,b)=>Number(a.key.endsWith(':call'))-Number(b.key.endsWith(':call'))||Number(a.certainty!=='official')-Number(b.certainty!=='official')||Number(a.status==='cancelled')-Number(b.status==='cancelled')||(b.lastChecked||'').localeCompare(a.lastChecked||'')||a.id.localeCompare(b.id));
+  const preferLive=calendarGroupKey(members[0]).startsWith('release|');
+  members.sort((a,b)=>(preferLive?Number(Boolean(a.verifiedOn))-Number(Boolean(b.verifiedOn)):0)||Number(a.key.endsWith(':call'))-Number(b.key.endsWith(':call'))||Number(a.certainty!=='official')-Number(b.certainty!=='official')||Number(a.status==='cancelled')-Number(b.status==='cancelled')||(b.lastChecked||'').localeCompare(a.lastChecked||'')||a.id.localeCompare(b.id));
   return {...members[0],...(members.length>1?{relatedEvents:members.slice(1)}:{})};
  }).sort((a,b)=>a.day.localeCompare(b.day)||(a.startAt||'99').localeCompare(b.startAt||'99')||a.title.localeCompare(b.title));
 }

@@ -26,3 +26,16 @@ test('official multi-day political meetings cover weekends as ongoing events, no
  const fresh={...nato[0],id:'new-meeting',day:'2026-11-22',endDay:'2026-11-23'};assert.equal(eventsOnDay([...nato,fresh],'2026-11-22').length,2);assert.equal(eventsOnDay([...nato,fresh],'2026-11-22')[0].day,'2026-11-22');
  assert.equal(parseCalendar('<a href="/content/summit-2026">Summit 2026, date TBC</a>',source('nato-pa')).length,0);
 });
+
+test('live release and verified notice share one card, retaining the source record',()=>{
+ const live={...calendarEvent(source('conference-board-confidence'),'conference-board-confidence-2026-11','Consumer Confidence Index','2026-11-24','10:00'),id:'live'};
+ const notice={...live,id:'notice',sourceId:'verified-notices',certainty:'official' as const,verifiedOn:'2026-11-22'};
+ const [event]=groupCalendarEvents([notice,live]);
+ assert.equal(groupCalendarEvents([notice,live]).length,1);
+ assert.equal(event.id,'live');
+ assert.equal(event.relatedEvents?.[0].id,'notice');
+
+ const claims={...calendarEvent(source('dol-claims'),'dol-claims-2026-11-26','Initial claims','2026-11-25','08:30'),id:'claims'};
+ const claimsNotice={...claims,id:'claims-notice',sourceId:'verified-notices',verifiedOn:'2026-11-22',key:'dol-claims-2026-11-25'};
+ assert.equal(groupCalendarEvents([claimsNotice,claims]).length,1);
+});

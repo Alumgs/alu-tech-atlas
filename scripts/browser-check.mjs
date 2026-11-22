@@ -80,6 +80,13 @@ try{
  assert.equal(await page.locator('.event-card:visible h3 a').evaluateAll((links,allowed)=>links.length>0&&links.every(link=>allowed.includes(link.href)),allowed),true,'Multi-source output contains a non-selected report');
  await page.locator('.source-picker-trigger:visible').click();await popup().getByRole('button',{name:'清空',exact:true}).click();await popup().getByRole('button',{name:'取消',exact:true}).click();
  assert.match(await page.locator('.source-picker-trigger:visible').innerText(),/2.*已选/,'Cancel applied the draft');
+ await page.locator('.site-header').getByRole('button',{name:'信息源',exact:true}).click();
+ const sourceDialog=page.getByRole('dialog');
+ await sourceDialog.getByText('环球日历来源',{exact:false}).click();
+ await sourceDialog.getByText('芝加哥联储 CFNAI',{exact:true}).waitFor();
+ await sourceDialog.getByText('重庆市政府新闻发布会',{exact:true}).waitFor();
+ await page.keyboard.press('Escape');
+ await sourceDialog.waitFor({state:'hidden'});
  const nav=page.getByRole('navigation',{name:'主导航',exact:true});
  await nav.getByRole('button',{name:'环球日历',exact:true}).click();
  await page.locator('main.view-calendar .gc-titlebar').waitFor();
