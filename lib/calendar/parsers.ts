@@ -8,7 +8,7 @@ export function englishDate(s:string,year?:number){const m=s.match(/(January|Feb
 function base(source:CalendarSource,key:string,title:string,day:string,time='',url=source.url):CalendarEvent{
  if(!validDay(day))throw Error('来源日期无效');
  const startAt=time?localInstant(day,time,source.timezone):undefined;
- const major=/GDP|CPI|Consumer Price|inflation|Employment Situation|利率|国民经济|采购经理|消费者|Quarter|Results|Presiden|FOMC|monetary policy|Personal Income/i.test(title);
+ const major=/工业经济效益|GDP|CPI|Consumer Price|inflation|Employment Situation|利率|国民经济|采购经理|消费者|Quarter|Results|Presiden|FOMC|monetary policy|Personal Income/i.test(title);
  return {id:'',sourceId:source.id,sourceName:source.name,sourceUrl:source.url,key,title:clean(title).slice(0,350),url:publicUrl(url)?url:source.url,category:source.category,region:source.region,country:source.country,importance:major?'major':'normal',day:startAt?beijingDay(startAt):day,startAt,originalDate:day+(time?' '+time:''),timezone:source.timezone,certainty:source.level,status:'scheduled',summary:source.note};
 }
 function ics(raw:string,source:CalendarSource){
@@ -48,7 +48,8 @@ function bea(raw:string,source:CalendarSource){
  return (raw.match(/<tr\b[^>]*class="scheduled-releases[^>]*>[\s\S]*?<\/tr>/gi)||[]).flatMap(row=>{
   const title=clean(row.match(/<td[^>]*class="release-title[^>]*>([\s\S]*?)<\/td>/i)?.[1]||''),day=englishDate(clean(row.match(/class="release-date"[^>]*>([\s\S]*?)<\/div>/i)?.[1]||''),year),m=clean(row).match(/(\d{1,2}):(\d{2})\s*(AM|PM)/i);
   if(!title||!day||!m)return [];
-  return [base(source,title,title,day,`${pad(Number(m[1])%12+(m[3].toUpperCase()==='PM'?12:0))}:${m[2]}`)];
+  const label=title.startsWith('Personal Income and Outlays')?'美国个人收入与支出（含 PCE、核心 PCE） / '+title:title;
+  return [base(source,title,label,day,`${pad(Number(m[1])%12+(m[3].toUpperCase()==='PM'?12:0))}:${m[2]}`)];
  });
 }
 function fed(raw:string,source:CalendarSource){
@@ -122,11 +123,12 @@ function chinaIr(raw:string,source:CalendarSource){
   if(!/\b(?:results|financial)\b/i.test(title))return [];
   const year=Number(title.match(/20\d{2}/)?.[0]),period=title.match(/(first|second|third|fourth)\s+quarter|(?:full\s+)?(?:fiscal\s+)?year/i)?.[0].toLowerCase().replace(/\s+/g,'-');
   if(!year||!period)return [];
-  const upcoming=/\bto report\b|\bwill announce\b/i.test(title),result=/\bannounces\b/i.test(title)&&/today announced/i.test(desc);
+  const upcoming=/\bto report\b|\bwill announce\b/i.test(title),result=/\b(?:announces|reports)\b/i.test(title)&&/today announced/i.test(desc);
   const day=upcoming?englishDate(title.split(/\bon\b/i).at(-1)||'',year):result?englishDate(desc.slice(0,180)):'';
   if(!validDay(day))return [];
-  const e=base(source,'earnings:'+period+':'+year,title,day,'',url);
-  e.summary=source.note+' '+(upcoming?'排期来自财报预告；具体发布时刻未明确，不推定为电话会时刻。':'原始结果公告明确说明当日发布。');
+  const release=upcoming&&desc.match(/(?:report|release|announce)[^.]{0,135}?\bat (\d{1,2}:\d{2}\s*[ap]\.?m\.?)\s+(?:Eastern time|EST|EDT|ET)\b/i);
+  const e=base(source,'earnings:'+period+':'+year,title,day,release?releaseTime(release[1]):'',url);
+  e.summary=source.note+' '+(release?'预告已明确披露财报发布时间。':upcoming?'排期来自财报预告；具体发布时刻未明确，不推定为电话会时刻。':'原始结果公告明确说明当日发布。');
   if(result){e.status='published';e.result='公司已发布该报告期的官方财报。请打开原文核对数值和口径。';e.resultUrl=url;}
   return [e];
  });
@@ -180,9 +182,92 @@ function nato(raw:string,source:CalendarSource){
   const url=new URL(m[1],source.url).href,e=base(source,url,'北约议会大会 / '+title,day,'',url);e.endDay=end;e.importance='major';e.summary=source.note+' '+title;return [e];
  });
 }
+function releaseTime(text:string){
+ const match=text.match(/(\d{1,2}):(\d{2})\s*([ap])\.?m\.?/i);
+ return match?pad(Number(match[1])%12+(match[3].toLowerCase()==='p'?12:0))+':'+match[2]:'';
+}
+
+function fedEvents(raw:string,source:CalendarSource){
+ const heading=raw.match(/<title>[^<]*Calendar:\s*([A-Za-z]+)\s+(20\d{2})/i);
+ if(!heading)throw Error('未识别美联储月历');
+ const events:CalendarEvent[]=[];
+ for(const section of raw.split(/<div class="row cal-nojs__rowTitle">/).slice(1)){
+  const label=clean(section.match(/<h4[^>]*>([^<]+)<\/h4>/)?.[1]||'');
+  if(label!=='Speeches'&&label!=='Beige Book')continue;
+  for(const panel of section.split(/<div class="panel-body">/).slice(1)){
+   const date=clean(panel.match(/<div class="col-xs-3">\s*<p>([\s\S]*?)<\/p>/)?.[1]||'');
+   const day=englishDate(heading[1]+' '+date,Number(heading[2]));
+   const name=clean(panel.match(/<div class="col-xs-7">\s*<p[^>]*>([\s\S]*?)<\/p>/)?.[1]||'');
+   if(!/^\d{1,2}$/.test(date)||!validDay(day)||!name)continue;
+   const topic=clean(panel.match(/class=['"]calendar__title['"][^>]*>([\s\S]*?)<\/p>/)?.[1]||'');
+   const isBeigeBook=label==='Beige Book';
+   const title=isBeigeBook?'美联储经济状况褐皮书 / Fed Beige Book':name+(topic?' · '+topic:'');
+   const identity=isBeigeBook?'beige-book':name+'|'+(topic||day.slice(8));
+   const event=base(source,day.slice(0,7)+'|'+identity,title,day,releaseTime(clean(panel.split('<div class="col-xs-7">')[0])));
+   if(isBeigeBook||/Chair|Economic Outlook|Monetary Policy/i.test(title))event.importance='major';
+   events.push(event);
+  }
+ }
+ return events;
+}
+
+function nyse(raw:string,source:CalendarSource){
+ const table=(raw.match(/<table\b[^>]*>[\s\S]*?<\/table>/gi)||[]).find(t=>/Thanksgiving Day/.test(t));
+ if(!table)throw Error('未识别 NYSE 节假日表');
+ const [header,...rows]=tableGrid(table);
+ const events:CalendarEvent[]=[];
+ for(const [holiday,...dates] of rows){
+  dates.forEach((value,index)=>{
+   const year=Number(header[index+1]);
+   const day=englishDate(value,year);
+   if(!year||!validDay(day))return;
+   const title=holiday==='Thanksgiving Day'?'NYSE 感恩节休市 / Thanksgiving Day':'NYSE 休市 · '+holiday;
+   events.push({...base(source,'holiday:'+holiday+'|'+year,title,day),importance:'major'});
+  });
+ }
+ for(const paragraph of raw.match(/<p\b[^>]*>[\s\S]*?<\/p>/gi)||[]){
+  const text=clean(paragraph);
+  if(!/will close early at/i.test(text))continue;
+  const time=releaseTime(text);
+  if(!time)continue;
+  for(const match of text.matchAll(/on\s+[A-Za-z]+,\s+([A-Za-z]+ \d{1,2}, 20\d{2})|(?:,|and)\s+[A-Za-z]+,\s+([A-Za-z]+ \d{1,2}, 20\d{2})/gi)){
+   const day=englishDate(match[1]||match[2]);
+   if(!validDay(day))continue;
+   events.push({...base(source,'early-close:'+day,'NYSE 提前收盘 / NYSE early close',day,time),importance:'major'});
+  }
+ }
+ return events;
+}
+
+function census(raw:string,source:CalendarSource){
+ const table=raw.match(/<table\b[^>]*\bid="calendar"[^>]*>[\s\S]*?<\/table>/i)?.[0];
+ if(!table)throw Error('未识别美国人口普查局排期表');
+ return tableGrid(table).flatMap(([name,date,time,period])=>{
+  if(!name||!date||!period)return [];
+  const day=englishDate(date),at=releaseTime(time);
+  if(!validDay(day)||!at)return [];
+  const title=name+' · '+period;
+  const event=base(source,title,title,day,at);
+  if(/Durable Goods|Residential Sales|Retail Sales|Trade in Goods|Housing Starts/i.test(title))event.importance='major';
+  return [event];
+ });
+}
+
+function dell(raw:string,source:CalendarSource){
+ return [...raw.matchAll(/<div class="event">\s*<time[^>]*>([\s\S]*?)<\/time>\s*<a href="([^"]+)"[^>]*>\s*<span class="link-heading">([^<]+)<\/span>/gi)].flatMap(match=>{
+  const [,stamp,link,title]=match,day=englishDate(clean(stamp)),zone=stamp.match(/\b([ECMP][SD]T)\b/)?.[1][0];
+  const zones:Record<string,string>={E:'America/New_York',C:'America/Chicago',M:'America/Denver',P:'America/Los_Angeles'};
+  const time=releaseTime(stamp);
+  if(!validDay(day)||!zone||!time)return [];
+  const event=base({...source,timezone:zones[zone]},title,title,day,time,new URL(link,source.url).href);
+  if(!/results|earnings/i.test(title))event.category='technology';
+  return [event];
+ });
+}
+
 export function parseCalendar(raw:string,source:CalendarSource):CalendarEvent[]{
  let events:CalendarEvent[]=[];
- switch(source.parser){case 'nato':events=nato(raw,source);break;case 'lpr':events=lprWindow(raw,source);break;case 'china-ir':events=chinaIr(raw,source);break;case 'alibaba':events=alibaba(raw,source);break;case 'tencent':events=tencent(raw,source);break;case 'apec':events=apec(raw,source);break;case 'gov-policy':events=governmentPolicy(raw,source);break;case 'ics':events=ics(raw,source);break;case 'nbs':events=nbs(raw,source);break;case 'bea':events=bea(raw,source);break;case 'fed':events=fed(raw,source);break;case 'ecb':events=ecb(raw,source);break;case 'elections':events=elections(raw,source);break;case 'microsoft':events=microsoft(raw,source);break;case 'eurostat':events=eurostat(raw,source);break;case 'q4':events=q4(raw,source);break;case 'boe':events=boe(raw,source);break;case 'boj':events=boj(raw,source);break;case 'amd':events=amd(raw,source);break;default:throw Error('该来源需专用活动适配器');}
+ switch(source.parser){case 'fed-events':events=fedEvents(raw,source);break;case 'nyse':events=nyse(raw,source);break;case 'census':events=census(raw,source);break;case 'dell':events=dell(raw,source);break;case 'nato':events=nato(raw,source);break;case 'lpr':events=lprWindow(raw,source);break;case 'china-ir':events=chinaIr(raw,source);break;case 'alibaba':events=alibaba(raw,source);break;case 'tencent':events=tencent(raw,source);break;case 'apec':events=apec(raw,source);break;case 'gov-policy':events=governmentPolicy(raw,source);break;case 'ics':events=ics(raw,source);break;case 'nbs':events=nbs(raw,source);break;case 'bea':events=bea(raw,source);break;case 'fed':events=fed(raw,source);break;case 'ecb':events=ecb(raw,source);break;case 'elections':events=elections(raw,source);break;case 'microsoft':events=microsoft(raw,source);break;case 'eurostat':events=eurostat(raw,source);break;case 'q4':events=q4(raw,source);break;case 'boe':events=boe(raw,source);break;case 'boj':events=boj(raw,source);break;case 'amd':events=amd(raw,source);break;default:throw Error('该来源需专用活动适配器');}
  const unique=new Map<string,CalendarEvent>();for(const e of events){if(e.day>=ARCHIVE_START&&e.title&&publicUrl(e.url)){if(source.parser!=='china-ir'||unique.get(e.key)?.status!=='published'||e.status==='published')unique.set(e.key,e);}}return [...unique.values()];
 }
 export {base as calendarEvent};

@@ -10,6 +10,8 @@ import {nbsResultLink,resultEvidence} from '../worker/calendar/results.ts';
 const source=(id:string)=>calendarSources.find(s=>s.id===id)!;
 test('forward window is exactly seven Beijing days and archive has no rolling lower bound',()=>{
  assert.deepEqual(calendarWindow(null,'2026-11-16'),{from:'2026-11-16',to:'2026-11-22'});
+ assert.deepEqual(calendarWindow(null,'2026-11-22',true),{from:'2026-11-23',to:'2026-11-29'});
+ assert.deepEqual(calendarWindow(null,'2026-12-28',true),{from:'2027-01-04',to:'2027-01-10'});
  assert.deepEqual(calendarWindow('2026-11','2030-03-02'),{from:'2026-11-01',to:'2026-11-30'});
  assert.throws(()=>calendarWindow('2026-10','2026-11-16'));
  assert.throws(()=>calendarWindow('2026-12','2026-11-16'));
@@ -87,4 +89,11 @@ test('APEC preserves multi-day host-China events and government policy uses effe
 test('LPR rule windows never become official dates or fabricate holiday adjustments',()=>{
  const e=lprWindow('每月20日（遇节假日顺延）',source('lpr'),'2026-11-17')[0];assert.equal(e.day,'2026-11-20');assert.equal(e.certainty,'tentative');assert.equal(e.status,'tentative');assert.equal(e.startAt,undefined);
  assert.throws(()=>lprWindow('规则已改为不定期公布',source('lpr'),'2026-11-17'));
+});
+
+test('market holiday and early close have distinct dates and only the close has a clock',()=>{
+ const raw='<table><tr><th>Holiday</th><th>2026</th></tr><tr><th>Thanksgiving Day</th><td>Thursday, November 26***</td></tr></table><p>Each market will close early at 1:00 p.m. on Friday, November 27, 2026.</p>';
+ const [closed,early]=parseCalendar(raw,source('nyse'));
+ assert.equal(closed.day,'2026-11-26');assert.equal(closed.startAt,undefined);
+ assert.equal(early.day,'2026-11-28');assert.equal(early.originalDate,'2026-11-27 13:00');
 });

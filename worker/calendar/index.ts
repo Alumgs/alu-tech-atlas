@@ -7,6 +7,7 @@ import type {CalendarEvent,CalendarSource} from '../../lib/calendar/types';
 import {boundedText,boundedJson} from '../../lib/http-safety.ts';
 import {saveEvents,states,fromRow} from './store.ts';
 import {listEvents} from './store.ts';
+import {verifiedNoticeEvents} from './verified-notices.ts';
 export type CalendarEnv={CALENDAR_DB?:WorkerBindings['CALENDAR_DB']};
 async function sourceText(url:string,allowed:string[]){
  const target=new URL(url);if(!allowed.includes(target.origin)||target.protocol!=='https:')throw Error('来源地址不在允许范围');
@@ -31,11 +32,44 @@ async function enrichQ4(events:CalendarEvent[],source:CalendarSource){
  }catch{/* Retain date-only listing if the details are unavailable. */}}
 }
 async function collect(source:CalendarSource){
+ const today=beijingDay();
+ if(source.parser==='fed-events'){
+  const months=[...new Set([today.slice(0,7),addDays(today,13).slice(0,7)])];
+  const outcomes=await Promise.allSettled(months.map(async month=>{
+   const name=new Intl.DateTimeFormat('en-US',{month:'long',timeZone:'UTC'}).format(new Date(month+'-01T12:00:00Z'));
+   const url=new URL('/newsevents/'+month.slice(0,4)+'-'+name+'.htm',source.url).href;
+   return parseCalendar(await sourceText(url,[new URL(source.url).origin]),{...source,url});
+  }));
+  const events=outcomes.flatMap(outcome=>outcome.status==='fulfilled'?outcome.value:[]);
+  if(!events.length)throw Error('未识别美联储月度排期');
+  return events;
+ }
+ if(source.parser==='census'){
+  const years=[...new Set([today.slice(0,4),addDays(today,13).slice(0,4)])];
+  const outcomes=await Promise.allSettled(years.map(async year=>{
+   const dated=source.url.replace('listview.html','listview-'+year+'.html');
+   for(const url of [dated,source.url]){
+    try{
+     const raw=await sourceText(url,[new URL(source.url).origin]);
+     const events=parseCalendar(raw,{...source,url}).filter(event=>event.originalDate.startsWith(year+'-'));
+     if(events.length)return events;
+    }catch{/* The current year may be served at the undated URL. */}
+   }
+   return [];
+  }));
+  const events=outcomes.flatMap(outcome=>outcome.status==='fulfilled'?outcome.value:[]);
+  if(!events.length)throw Error('未识别美国人口普查局年度排期');
+  return events;
+ }
  let url=source.url;
  if(source.parser==='eurostat'){const today=beijingDay();url=new URL('/eurostat/o/calendars/eventsJson',source.url).href+'?start='+encodeURIComponent(ARCHIVE_START+'T00:00:00+01:00')+'&end='+encodeURIComponent(addDays(today,90)+'T00:00:00+01:00')+'&isEuroindicator=true';}
+ const nbsFallback='https://www.stats.gov.cn/xw/tjxw/tzgg/202512/t20251224_1962137.html';
  let raw:string;
  try{raw=await sourceText(url,[new URL(source.url).origin]);}
  catch(error){
+  if(source.id==='nbs'&&today.startsWith('2026-')){
+   return parseCalendar(await sourceText(nbsFallback,[new URL(source.url).origin]),{...source,url:nbsFallback});
+  }
   if(source.id!=='bls')throw error;
   // Public BLS-maintained alternate host, not a third-party proxy.
   raw=await sourceText('https://blsmon1.bls.gov/schedule/news_release/bls.ics',['https://blsmon1.bls.gov']);
@@ -47,7 +81,14 @@ async function collect(source:CalendarSource){
    const page=await sourceText(link,['https://www.gov.cn']);return governmentPolicy(page,source,link);
   }))).flat();return events.filter(e=>e.day>=ARCHIVE_START);
  }
- let events=parseCalendar(raw,source);
+ let events:CalendarEvent[];
+ try{
+  events=parseCalendar(raw,source);
+  if(source.id==='nbs'&&!events.length)throw Error('国家统计局页面没有可解析条目');
+ }catch(error){
+  if(source.id!=='nbs'||!today.startsWith('2026-'))throw error;
+  events=parseCalendar(await sourceText(nbsFallback,[new URL(source.url).origin]),{...source,url:nbsFallback});
+ }
  if(!events.length&&!/<rss\b/i.test(raw))throw Error('未识别到有效日程，需核查源站格式');
  if(source.parser==='q4')await enrichQ4(events,source);
  // Upcoming FOMC minutes are separately stated by the Fed; do not infer them from a fixed recurrence.
@@ -88,7 +129,9 @@ export async function calendarApi(request:Request,env:CalendarEnv){
    const body=await boundedJson(request),id=typeof body.id==='string'?body.id:'';
    if(!/^[a-f0-9]{64}$/.test(id))return json({error:'事件编号无效。'},400);
    let row=await db.prepare('SELECT * FROM calendar_events WHERE id=?').bind(id).first<Parameters<typeof fromRow>[0]>();if(!row)return json({error:'事件不存在。'},404);
-   const checks=await refreshSources(db,[fromRow(row).sourceId],true);
+   const stored=fromRow(row);
+   if(stored.verifiedOn)return json({ok:true,verifiedOn:stored.verifiedOn});
+   const checks=await refreshSources(db,[stored.sourceId],true);
    const sourceError=checks.find(r=>'error' in r)?.error;
    row=await db.prepare('SELECT * FROM calendar_events WHERE id=?').bind(id).first<Parameters<typeof fromRow>[0]>();
    if(row){const event=fromRow(row);if(event.day<=beijingDay()){
@@ -117,11 +160,16 @@ export async function calendarApi(request:Request,env:CalendarEnv){
    const versions=await db.prepare('SELECT sequence,recorded_at,day,payload FROM calendar_versions WHERE event_id=? ORDER BY sequence DESC LIMIT 100').bind(id).all<{sequence:number;recorded_at:string;day:string;payload:string}>();
    return json({event:fromRow(row),versions:versions.results.map(v=>({...v,payload:JSON.parse(v.payload)}))});
   }
-  const today=beijingDay(),window=calendarWindow(url.searchParams.get('month'),today),[data,status]=await Promise.all([listEvents(db,window.from,window.to),states(db)]);
+  const today=beijingDay(),window=calendarWindow(url.searchParams.get('month'),today,url.searchParams.get('period')==='next-week'),[data,status]=await Promise.all([listEvents(db,window.from,window.to),states(db)]);
   const months=await db.prepare('SELECT DISTINCT substr(day,1,7) AS month FROM calendar_events WHERE day>=? AND day<=? ORDER BY month DESC').bind(ARCHIVE_START,today).all<{month:string}>();
   const grouped=groupCalendarEvents(data.events),coverage=Array.from({length:Math.round((Date.parse(window.to)-Date.parse(window.from))/86400000)+1},(_,i)=>{const day=addDays(window.from,i),events=grouped.filter(e=>e.day<=day&&(e.endDay||e.day)>=day);return {day,total:events.length,starting:events.filter(e=>e.day===day).length,ongoing:events.filter(e=>e.day<day).length};});
   return json({...data,events:grouped,coverage,rawCount:data.events.length,mergedCount:data.events.length-grouped.length,...window,today,archiveStart:ARCHIVE_START,storage:'cloudflare-d1',months:months.results.map(x=>x.month),sources:calendarSources.map(s=>({...s,state:status.find(x=>x.source_id===s.id)}))});
  }catch(error){console.error(JSON.stringify({event:'calendar_api',error:String(error)}));return json({error:error instanceof Error?error.message:'读取日历失败。'},url.searchParams.has('month')?400:503);}
+}
+export async function importVerifiedNotices(db:D1Database){
+ const events=verifiedNoticeEvents();
+ const changed=await saveEvents(db,events,new Date().toISOString());
+ return {ok:true,count:events.length,changed};
 }
 export async function scheduledCalendar(env:CalendarEnv){if(!env.CALENDAR_DB)return;for(let i=0;i<calendarSources.length;i+=3)await refreshSources(env.CALENDAR_DB,calendarSources.slice(i,i+3).map(s=>s.id));}
 

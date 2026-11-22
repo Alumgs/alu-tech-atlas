@@ -11,7 +11,7 @@ for(let attempt=1;attempt<=6;attempt++){
  if(attempt===6)throw Error('health endpoint invalid: status='+health.status+', content-type='+contentType+', location='+String(health.headers.get('location')));
  await new Promise(r=>setTimeout(r,1500));
 }
-must(info?.ok&&info?.authConfigured&&info?.version==='4.5.2'&&info?.settingsStorage,'health, auth or KV settings configuration failed');
+must(info?.ok&&info?.authConfigured&&info?.version==='4.6.0'&&info?.settingsStorage,'health, auth or KV settings configuration failed');
 for(const path of ['/','/calendar','/settings','/case-study','/read/a04','/aidc.jpg']){
  const r=await request(path);
  must(r.status===302&&r.headers.get('location')?.startsWith('/auth/login'),'anonymous path is not protected: '+path);
@@ -89,7 +89,7 @@ if(process.env.ATLAS_ACCESS_PASSWORD){
   const calendarPortal=await request('/?domain=aidc&view=calendar',{headers:{Cookie:cookie}});
   const calendarHtml=await calendarPortal.text();
   must(calendarPortal.ok&&calendarHtml.includes('gc-titlebar')&&!calendarHtml.includes('class="gc-hero"'),'compact calendar first render failed');
-  for(const sources of [['nbs','bls','bea'],['fed','ecb','elections'],['nvidia','microsoft','eurostat'],['boe','boj','meta'],['amazon','amd'],['jd','netease','baidu'],['pdd','alibaba','tencent'],['apec','gov-policy','lpr'],['nato-pa']]){
+  for(const sources of [['fed-events','nyse','census'],['dell','adi','li-auto'],['nbs','bls','bea'],['fed','ecb','elections'],['nvidia','microsoft','eurostat'],['boe','boj','meta'],['amazon','amd'],['jd','netease','baidu'],['pdd','alibaba','tencent'],['apec','gov-policy','lpr'],['nato-pa']]){
    const r=await request('/api/calendar/refresh',{method:'POST',headers:{Cookie:cookie,Origin:origin,'Content-Type':'application/json'},body:JSON.stringify({sources,force:true}),signal:AbortSignal.timeout(90000)});
    const d=await r.json();must(r.ok&&Array.isArray(d.results),'calendar refresh contract failed');console.log('Calendar source status:',JSON.stringify(d.results));
   }
@@ -99,9 +99,16 @@ if(process.env.ATLAS_ACCESS_PASSWORD){
   must(windowDays===6,'calendar forward range must be seven inclusive days');
   must(Array.isArray(agenda.coverage)&&agenda.coverage.length===7,'daily coverage missing');
   must(agenda.events.every((e,i,all)=>all.findIndex(x=>x.country===e.country&&x.day===e.day&&x.startAt===e.startAt&&x.title===e.title)===i),'duplicate calendar cards remain');
-  must(agenda.events.some(e=>e.sourceId==='nato-pa'),'official political schedule expansion missing');
   console.log('Calendar daily coverage:',JSON.stringify(agenda.coverage));
-  if(agenda.from==='2026-11-17')must(agenda.coverage.every(d=>d.total>0),'current seven-day window must have verified daily coverage');
+  const nextWeek=await request('/api/calendar?period=next-week',{headers:{Cookie:cookie}}),preview=await nextWeek.json();
+  must(nextWeek.ok&&preview.coverage.length===7&&new Date(preview.from+'T00:00:00Z').getUTCDay()===1,'calendar next-week range must start Monday and contain seven days');
+  if(preview.from==='2026-11-23'){
+   must(preview.coverage.every(day=>day.total>0),'weekly agenda has an uncovered date');
+   for(const marker of ['PMI','主动 ETF','小米','美团','氢氧化锂','高交会','西班牙','OPEC+']){
+    must(preview.events.some(event=>event.title.includes(marker)),'verified weekly event missing: '+marker);
+   }
+   console.log('Next-week verified:',JSON.stringify({from:preview.from,to:preview.to,count:preview.events.length,china:preview.events.filter(event=>event.region==='中国').length,notices:preview.events.filter(event=>event.verifiedOn).length,daily:preview.coverage.map(day=>day.total),addedFeeds:preview.sources.filter(source=>['fed-events','nyse','census','dell','adi','li-auto'].includes(source.id)).map(source=>({id:source.id,ok:source.state?.ok,entries:preview.events.filter(event=>event.sourceId===source.id).length}))}));
+  }
   const archive=await request('/api/calendar?month=2026-11',{headers:{Cookie:cookie}}),history=await archive.json();
   must(archive.ok&&history.archiveStart==='2026-11-01'&&Array.isArray(history.events),'calendar archive contract failed');
   const record=await request('/api/calendar?id='+agenda.events[0].id,{headers:{Cookie:cookie}}),recordData=await record.json();

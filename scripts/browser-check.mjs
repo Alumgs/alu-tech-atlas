@@ -84,6 +84,12 @@ try{
  await nav.getByRole('button',{name:'环球日历',exact:true}).click();
  await page.locator('main.view-calendar .gc-titlebar').waitFor();
  await page.locator('.gc-event:visible').first().waitFor();
+ const nextWeekResponse=page.waitForResponse(response=>new URL(response.url()).searchParams.get('period')==='next-week'&&new URL(response.url()).pathname==='/api/calendar');
+ await page.getByRole('button',{name:'下周',exact:true}).click();
+ const nextWeekPayload=await (await nextWeekResponse).json();
+ assert.equal(nextWeekPayload.coverage.length,7);assert.equal(new Date(nextWeekPayload.from+'T00:00:00Z').getUTCDay(),1);
+ await page.getByRole('button',{name:'未来七天',exact:true}).click();
+
  await nav.getByRole('button',{name:'世界热点',exact:true}).click();await page.locator('main.view-world .source-picker-trigger:visible').waitFor();
  assert.match(await page.locator('.source-picker-trigger:visible').innerText(),/2.*已选/,'Source selection was lost on a round trip');
  const samples=[];

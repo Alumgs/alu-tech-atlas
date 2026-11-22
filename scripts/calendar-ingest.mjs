@@ -19,6 +19,12 @@ if(!cookie)throw Error('Calendar runner session missing');
 try{
  const r=await fetch(new URL('/api/calendar/import',base),{method:'POST',headers:{Cookie:cookie,Origin:origin,'Content-Type':'application/json'},body:JSON.stringify({source:'bls',raw,currentPassword:password}),signal:AbortSignal.timeout(90000)});
  const result=await r.json();if(!r.ok||!result.ok)throw Error('Calendar fallback sync failed: HTTP '+r.status);
+ if(process.argv.includes('--verified-notices')){
+  const notices=await fetch(new URL('/api/calendar/import',base),{method:'POST',headers:{Cookie:cookie,Origin:origin,'Content-Type':'application/json'},body:JSON.stringify({source:'verified-notices',currentPassword:password}),signal:AbortSignal.timeout(90000)});
+  const edition=await notices.json();
+  if(!notices.ok||!edition.ok)throw Error('Verified notice sync failed: HTTP '+notices.status);
+  console.log('Verified notices synchronized:',JSON.stringify({count:edition.count,changed:edition.changed}));
+ }
  console.log('Official BLS calendar synchronized:',JSON.stringify({count:result.count,changed:result.changed}));
 }finally{
  await fetch(new URL('/auth/logout',base),{method:'POST',headers:{Cookie:cookie,Origin:origin}}).catch(()=>{});

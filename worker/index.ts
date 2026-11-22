@@ -1,4 +1,4 @@
-import {calendarApi,scheduledCalendar,importBlsSnapshot} from './calendar/index';
+import {calendarApi,scheduledCalendar,importBlsSnapshot,importVerifiedNotices} from './calendar/index';
 import handler from 'vinext/server/fetch-handler';
 import {translateText} from './translate';
 import {configured,verifyPassword,hashPassword,issueSession,validSession,getCookie,sessionCookie,sameOrigin,safeReturn,type AuthEnv} from './auth';
@@ -104,7 +104,7 @@ export default {
   if(!['GET','HEAD'].includes(request.method)&&!sameOrigin(request))return protect(json({error:'请求来源不符。'},403));
   if(path==='/api/health'&&!['GET','HEAD'].includes(request.method))return protect(json({error:'仅支持 GET 或 HEAD。'},405,{Allow:'GET, HEAD'}));
   const authEnv=await effectiveAuthEnv(env);
-  if(path==='/api/health')return protect(Response.json({ok:true,service:'alu-tech-atlas',version:'4.5.2',release:env.ATLAS_RELEASE||'',platform:'cloudflare-workers',authConfigured:configured(authEnv),settingsStorage:Boolean(env.ATLAS_SETTINGS),calendarStorage:Boolean(env.CALENDAR_DB),sessionDays:7}));
+  if(path==='/api/health')return protect(Response.json({ok:true,service:'alu-tech-atlas',version:'4.6.0',release:env.ATLAS_RELEASE||'',platform:'cloudflare-workers',authConfigured:configured(authEnv),settingsStorage:Boolean(env.ATLAS_SETTINGS),calendarStorage:Boolean(env.CALENDAR_DB),sessionDays:7}));
   if(!configured(authEnv))return protect(new Response('网站正在完成访问配置，请稍后再试。',{status:503,headers:{'Content-Type':'text/plain; charset=utf-8'}}));
   if(path==='/auth/login'){
    if(request.method==='GET')result=html('',safeReturn(url.searchParams.get('returnTo')));
@@ -137,7 +137,8 @@ export default {
      try{
       const body=await boundedJson(request,1000000);
       if(typeof body.currentPassword!=='string'||!await verifyPassword(body.currentPassword,authEnv.ATLAS_PASSWORD_HASH||''))result=json({error:'需要验证当前管理员密码。'},403);
-      else if(body.source!=='bls'||typeof body.raw!=='string')result=json({error:'仅支持官方 BLS 日历快照。'},400);
+      else if(body.source==='verified-notices')result=json(await importVerifiedNotices(env.CALENDAR_DB));
+      else if(body.source!=='bls'||typeof body.raw!=='string')result=json({error:'仅支持官方 BLS 快照或已核验公告。'},400);
       else result=json(await importBlsSnapshot(env.CALENDAR_DB,body.raw));
      }catch(e){result=json({error:e instanceof RequestError?e.message:'快照同步失败。'},e instanceof RequestError?e.status:503);}
     }
