@@ -117,6 +117,12 @@ try{
  await etfResult.waitFor();
  assert.match(await etfResult.getAttribute('href'),/^https:\/\/www\.sse\.com\.cn\/.*20261123_10838703/);
  assert.equal(await etfResult.getAttribute('target'),'_blank');
+ const resultUrl=await etfResult.getAttribute('href');
+ await context.route(resultUrl,route=>route.fulfill({body:'Calendar result navigation regression'}));
+ const [resultTab]=await Promise.all([page.waitForEvent('popup'),etfResult.click()]);
+ await resultTab.waitForURL(resultUrl);
+ await resultTab.close();
+ await context.unroute(resultUrl);
  await etfRow.locator('.gc-event').click();
  const detailResult=page.locator('.gc-detail').getByRole('link',{name:'查看结果',exact:true});
  assert.equal(await detailResult.getAttribute('href'),await etfResult.getAttribute('href'));

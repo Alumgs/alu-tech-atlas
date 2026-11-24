@@ -6,6 +6,7 @@ import {calendarSources} from '../lib/calendar/sources.ts';
 import {parseCalendar,calendarEvent,lprWindow} from '../lib/calendar/parsers.ts';
 import {calendarWindow,localInstant,beijingDay} from '../lib/calendar/time.ts';
 import {saveCalendarResult,saveEvents,listEvents} from '../worker/calendar/store.ts';
+import {verifiedResult} from '../worker/calendar/verified-results.ts';
 import {blsResultLink,nbsResultLink,resultEvidence} from '../worker/calendar/results.ts';
 const source=(id:string)=>calendarSources.find(s=>s.id===id)!;
 test('forward window is exactly seven Beijing days and archive has no rolling lower bound',()=>{
@@ -117,4 +118,13 @@ test('verified release evidence survives refresh, but a stale verification canno
   await saveEvents(db,[moved],'2026-11-24T00:04:00Z');
   assert.equal((await window()).events[0].resultUrl,evidence.resultUrl);
  }finally{sql.close();}
+});
+
+test('known outcomes match the archived fiscal-quarter abbreviation and APEC multi-day agenda',()=>{
+ const nvidia=calendarEvent(source('nvidia'),'earnings','NVIDIA 3rd Quarter FY27 Financial Results','2026-11-17','14:00');
+ assert.match(verifiedResult(nvidia)?.resultUrl||'',/Fiscal-2027/);
+ assert.equal(verifiedResult({...nvidia,originalDate:'2026-11-26 14:00'}),undefined);
+ const apec=calendarEvent(source('apec'),'leaders','APEC Economic Leaders’ Meeting','2026-11-18');
+ assert.match(verifiedResult({...apec,endDay:'2026-11-19'})?.resultUrl||'',/2026-apec-leaders-declaration/);
+ assert.equal(verifiedResult({...apec,title:'APEC CEO Summit'}),undefined);
 });
