@@ -108,6 +108,18 @@ try{
   await page.locator('.site-header').getByRole('button',{name:'中文',exact:true}).click();
   await page.waitForFunction(()=>document.documentElement.lang==='zh-CN');
  }
+ await page.getByRole('button',{name:'往期追溯',exact:true}).click();
+ const archiveMonth=page.getByLabel('历史月份',{exact:true});
+ if(await archiveMonth.inputValue()!=='2026-11')await archiveMonth.fill('2026-11');
+ await page.locator('.gc-month-grid [data-day="2026-11-23"]:enabled').click();
+ const etfRow=agenda.locator('.gc-event-row').filter({hasText:'沪深首批主动 ETF'});
+ const etfResult=etfRow.getByRole('link',{name:'查看结果',exact:true});
+ await etfResult.waitFor();
+ assert.match(await etfResult.getAttribute('href'),/^https:\/\/www\.sse\.com\.cn\/.*20261123_10838703/);
+ assert.equal(await etfResult.getAttribute('target'),'_blank');
+ await etfRow.locator('.gc-event').click();
+ const detailResult=page.locator('.gc-detail').getByRole('link',{name:'查看结果',exact:true});
+ assert.equal(await detailResult.getAttribute('href'),await etfResult.getAttribute('href'));
  await page.getByRole('button',{name:'未来七天',exact:true}).click();
 
  await nav.getByRole('button',{name:'世界热点',exact:true}).click();await page.locator('main.view-world .source-picker-trigger:visible').waitFor();

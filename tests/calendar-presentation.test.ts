@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {calendarSources} from '../lib/calendar/sources.ts';
 import {calendarEvent,parseCalendar} from '../lib/calendar/parsers.ts';
-import {groupCalendarEvents,eventsOnDay,calendarTitle} from '../lib/calendar/presentation.ts';
+import {groupCalendarEvents,eventsOnDay,calendarTitle,calendarResultEvent} from '../lib/calendar/presentation.ts';
 const source=(id:string)=>calendarSources.find(s=>s.id===id)!;
 test('changed feed UIDs do not duplicate calendar cards; original records remain accessible',()=>{
  const e=calendarEvent(source('bls'),'uid-old','U.S. Import and Export Price Indexes','2026-11-17','08:30');
@@ -38,4 +38,13 @@ test('live release and verified notice share one card, retaining the source reco
  const claims={...calendarEvent(source('dol-claims'),'dol-claims-2026-11-26','Initial claims','2026-11-25','08:30'),id:'claims'};
  const claimsNotice={...claims,id:'claims-notice',sourceId:'verified-notices',verifiedOn:'2026-11-22',key:'dol-claims-2026-11-25'};
  assert.equal(groupCalendarEvents([claimsNotice,claims]).length,1);
+});
+
+test('a merged card links only to verified evidence, including evidence from another record in the group',()=>{
+ const record=calendarEvent(source('bls'),'cpi','Consumer Price Index','2026-11-16','08:30');
+ assert.equal(calendarResultEvent({...record,resultUrl:'https://www.bls.gov/news.release/cpi.nr0.htm'}),undefined);
+ assert.equal(calendarResultEvent({...record,status:'published',resultUrl:'https://www.bls.gov/news.release/cpi.nr0.htm'}),undefined);
+ const published={...record,status:'published' as const,resultUrl:'https://www.bls.gov/news.release/archives/cpi_11162026.htm'};
+ assert.equal(calendarResultEvent({...record,relatedEvents:[published]})?.resultUrl,published.resultUrl);
+ assert.equal(calendarResultEvent({...record,status:'cancelled',relatedEvents:[published]}),undefined);
 });

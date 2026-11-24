@@ -11,7 +11,7 @@ for(let attempt=1;attempt<=6;attempt++){
  if(attempt===6)throw Error('health endpoint invalid: status='+health.status+', content-type='+contentType+', location='+String(health.headers.get('location')));
  await new Promise(r=>setTimeout(r,1500));
 }
-must(info?.ok&&info?.authConfigured&&info?.version==='4.6.2'&&info?.settingsStorage,'health, auth or KV settings configuration failed');
+must(info?.ok&&info?.authConfigured&&info?.version==='4.6.3'&&info?.settingsStorage,'health, auth or KV settings configuration failed');
 for(const path of ['/','/calendar','/settings','/case-study','/read/a04','/aidc.jpg']){
  const r=await request(path);
  must(r.status===302&&r.headers.get('location')?.startsWith('/auth/login'),'anonymous path is not protected: '+path);
@@ -115,6 +115,11 @@ if(process.env.ATLAS_ACCESS_PASSWORD){
   }
   const archive=await request('/api/calendar?month=2026-11',{headers:{Cookie:cookie}}),history=await archive.json();
   must(archive.ok&&history.archiveStart==='2026-11-01'&&Array.isArray(history.events),'calendar archive contract failed');
+  const resultRows=history.events.flatMap(event=>[event,...(event.relatedEvents||[])]).filter(event=>event.status==='published'&&event.resultUrl);
+  for(const marker of ['active-etf-first-listing','china-asean-week-2026','zoom-fy2027-q3-call','pmi-flash-2026-11-us']){
+   must(resultRows.some(event=>event.key===marker&&event.resultUrl!==event.url),'verified archive result link missing: '+marker);
+  }
+  console.log('Calendar result links verified:',JSON.stringify({results:resultRows.length,records:resultRows.map(({key,resultUrl})=>({key,resultUrl})).slice(0,30)}));
   const record=await request('/api/calendar?id='+agenda.events[0].id,{headers:{Cookie:cookie}}),recordData=await record.json();
   must(record.ok&&recordData.versions?.length>0,'calendar revision history missing');
   must(agenda.sources.filter(s=>s.region==='中国').length>=8,'China source registry incomplete');

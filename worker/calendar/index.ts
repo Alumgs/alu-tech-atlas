@@ -1,12 +1,12 @@
-import {groupCalendarEvents} from '../../lib/calendar/presentation.ts';
-import {nbsResultLink,resultEvidence} from './results.ts';
+import {calendarResultEvent,groupCalendarEvents} from '../../lib/calendar/presentation.ts';
+import {blsResultLink,nbsResultLink,resultEvidence} from './results.ts';
 import {calendarReferenceSources,calendarSources} from '../../lib/calendar/sources.ts';
 import {parseCalendar,calendarEvent,clean,englishDate,governmentPolicy} from '../../lib/calendar/parsers.ts';
 import {beijingDay,addDays,calendarWindow,ARCHIVE_START,localInstant} from '../../lib/calendar/time.ts';
 import type {CalendarEvent,CalendarSource} from '../../lib/calendar/types';
 import {boundedText,boundedJson} from '../../lib/http-safety.ts';
-import {saveEvents,states,fromRow} from './store.ts';
-import {listEvents} from './store.ts';
+import {saveEvents,saveCalendarResult,states,fromRow,listEvents} from './store.ts';
+import {verifiedResult} from './verified-results.ts';
 import {verifiedNoticeEvents} from './verified-notices.ts';
 export type CalendarEnv={CALENDAR_DB?:WorkerBindings['CALENDAR_DB']};
 async function sourceText(url:string,allowed:string[]){
@@ -120,6 +120,36 @@ export async function refreshSources(db:D1Database,ids:string[],force=false){
    const message=error instanceof Error?error.message.slice(0,160):'采集失败';await db.prepare('UPDATE calendar_source_state SET attempted_at=?,ok=0,error=?,lease_until=0,lease_owner=NULL WHERE source_id=? AND lease_owner=?').bind(now,message,id,owner).run();console.warn(JSON.stringify({event:'calendar_source',id,ok:false,error:message}));return {id,ok:false,error:message};}
  }));
 }
+const nbsReleaseIndex='https://www.stats.gov.cn/sj/zxfb/';
+async function checkReleaseResult(db:D1Database,event:CalendarEvent,readNbsIndex=()=>sourceText(nbsReleaseIndex,['https://www.stats.gov.cn'])){
+ if(event.status==='cancelled'||calendarResultEvent(event))return;
+ if(event.startAt?Date.parse(event.startAt)>Date.now():event.day>beijingDay())return;
+ try{
+  let resultUrl=blsResultLink(event);
+  if(event.sourceId==='nbs')resultUrl=nbsResultLink(await readNbsIndex(),event);
+  if(!resultUrl)return;
+  const allowed=['https://www.bls.gov','https://www.stats.gov.cn'];
+  const evidence=resultEvidence(await sourceText(resultUrl,allowed),event);
+  if(evidence){
+   const now=new Date().toISOString();
+   await saveCalendarResult(db,event,{result:evidence.text,resultUrl,resultCheckedAt:now},now);
+  }
+ }catch(error){console.warn(JSON.stringify({event:'calendar_result_check',id:event.id,error:String(error)}));}
+}
+
+async function checkRecentReleaseResults(db:D1Database){
+ const today=beijingDay();
+ const rows=await db.prepare(`SELECT * FROM calendar_events
+  WHERE source_id IN ('bls','nbs') AND day BETWEEN ? AND ?
+  ORDER BY day DESC LIMIT 80`).bind(addDays(today,-7),today).all<Parameters<typeof fromRow>[0]>();
+ const events=rows.results.map(fromRow).filter(event=>event.status!=='cancelled'&&!calendarResultEvent(event)&&(event.sourceId==='nbs'||blsResultLink(event)));
+ // The statistics office index is shared by all events in this scan.
+ let index:Promise<string>|undefined;
+ for(let i=0;i<Math.min(events.length,12);i+=3){
+  await Promise.all(events.slice(i,Math.min(i+3,12)).map(event=>checkReleaseResult(db,event,()=>index??=sourceText(nbsReleaseIndex,['https://www.stats.gov.cn']))));
+ }
+}
+
 const json=(data:unknown,status=200)=>Response.json(data,{status,headers:{'Cache-Control':'private, no-store'}});
 export async function calendarApi(request:Request,env:CalendarEnv){
  const db=env.CALENDAR_DB;if(!db)return json({error:'日历存储未配置。'},503);
@@ -128,23 +158,14 @@ export async function calendarApi(request:Request,env:CalendarEnv){
   if(request.method==='POST'&&url.pathname==='/api/calendar/check'){
    const body=await boundedJson(request),id=typeof body.id==='string'?body.id:'';
    if(!/^[a-f0-9]{64}$/.test(id))return json({error:'事件编号无效。'},400);
-   let row=await db.prepare('SELECT * FROM calendar_events WHERE id=?').bind(id).first<Parameters<typeof fromRow>[0]>();if(!row)return json({error:'事件不存在。'},404);
+   const row=await db.prepare('SELECT * FROM calendar_events WHERE id=?').bind(id).first<Parameters<typeof fromRow>[0]>();if(!row)return json({error:'事件不存在。'},404);
    const stored=fromRow(row);
    if(stored.verifiedOn)return json({ok:true,verifiedOn:stored.verifiedOn});
+   if(calendarResultEvent(stored))return json({ok:true});
    const checks=await refreshSources(db,[stored.sourceId],true);
    const sourceError=checks.find(r=>'error' in r)?.error;
-   row=await db.prepare('SELECT * FROM calendar_events WHERE id=?').bind(id).first<Parameters<typeof fromRow>[0]>();
-   if(row){const event=fromRow(row);if(event.day<=beijingDay()){
-    try{
-     let resultUrl=event.resultUrl;
-     if(event.sourceId==='nbs'){const index=await sourceText('https://www.stats.gov.cn/sj/zxfb/',['https://www.stats.gov.cn']);resultUrl=nbsResultLink(index,event)||undefined;}
-     const allowed=['https://www.bls.gov','https://www.stats.gov.cn'];
-     if(resultUrl&&allowed.includes(new URL(resultUrl).origin)){
-      const page=await sourceText(resultUrl,allowed),evidence=resultEvidence(page,event);
-      if(evidence){const {firstSeen:_f,lastChecked:_l,updatedAt:_u,revision:_r,...current}=event;await saveEvents(db,[{...current,result:evidence.text,resultUrl,status:'published'}],new Date().toISOString());}
-     }
-    }catch(e){console.warn(JSON.stringify({event:'calendar_result_check',id,error:String(e)}));}
-   }}
+   const refreshed=await db.prepare('SELECT * FROM calendar_events WHERE id=?').bind(id).first<Parameters<typeof fromRow>[0]>();
+   if(refreshed)await checkReleaseResult(db,fromRow(refreshed));
    return json({ok:true,warning:sourceError||null});
   }
   if(request.method==='POST'&&url.pathname==='/api/calendar/refresh'){
@@ -167,11 +188,21 @@ export async function calendarApi(request:Request,env:CalendarEnv){
  }catch(error){console.error(JSON.stringify({event:'calendar_api',error:String(error)}));return json({error:error instanceof Error?error.message:'读取日历失败。'},url.searchParams.has('month')?400:503);}
 }
 export async function importVerifiedNotices(db:D1Database){
- const events=verifiedNoticeEvents();
- const changed=await saveEvents(db,events,new Date().toISOString());
- return {ok:true,count:events.length,changed};
+ const events=verifiedNoticeEvents(),now=new Date().toISOString();
+ const changed=await saveEvents(db,events,now);
+ const archive=await listEvents(db,'2026-11-09','2026-11-24');
+ let results=0;
+ for(const stored of archive.events){
+  const evidence=verifiedResult(stored);
+  if(evidence&&await saveCalendarResult(db,stored,evidence,now))results++;
+ }
+ return {ok:true,count:events.length,changed,results};
 }
-export async function scheduledCalendar(env:CalendarEnv){if(!env.CALENDAR_DB)return;for(let i=0;i<calendarSources.length;i+=3)await refreshSources(env.CALENDAR_DB,calendarSources.slice(i,i+3).map(s=>s.id));}
+export async function scheduledCalendar(env:CalendarEnv){
+ if(!env.CALENDAR_DB)return;
+ for(let i=0;i<calendarSources.length;i+=3)await refreshSources(env.CALENDAR_DB,calendarSources.slice(i,i+3).map(s=>s.id));
+ await checkRecentReleaseResults(env.CALENDAR_DB);
+}
 
 /** Administrator-confirmed fallback for official BLS snapshots collected by our trusted CI runner. */
 export async function importBlsSnapshot(db:D1Database,raw:string){

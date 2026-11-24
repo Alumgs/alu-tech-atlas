@@ -1,4 +1,5 @@
 import type {CalendarEvent} from './types';
+import {publicUrl} from '../url-safety.ts';
 const normalize=(value:string)=>value.normalize('NFKC').toLowerCase().replace(/[\p{P}\p{Z}\s]/gu,'');
 const noticeAliases:Record<string,string>={
  'dol-claims-2026-11-25':'dol-claims-2026-11-26',
@@ -27,6 +28,7 @@ export function groupCalendarEvents(input:CalendarEvent[]):CalendarEvent[]{
  }).sort((a,b)=>a.day.localeCompare(b.day)||(a.startAt||'99').localeCompare(b.startAt||'99')||a.title.localeCompare(b.title));
 }
 export function calendarTitle(e:CalendarEvent){
+ if(e.sourceId==='lpr'&&e.status==='published')return '中国贷款市场报价利率（LPR） / China loan prime rate';
  const company:Record<string,string>={jd:'京东',netease:'网易',baidu:'百度',pdd:'拼多多',alibaba:'阿里巴巴','li-auto':'理想汽车'};
  const year=e.title.match(/20\d{2}/)?.[0],quarter=e.title.match(/(first|second|third|fourth)\s+quarter/i)?.[1]?.toLowerCase();
  if(company[e.sourceId]&&year&&quarter)return `${company[e.sourceId]} ${year} 年第${{first:'一',second:'二',third:'三',fourth:'四'}[quarter]}季度财报`;
@@ -48,4 +50,12 @@ export function calendarDayPreview(events:CalendarEvent[]){
   if(picked.length===3)return picked;
  }
  return [...picked,...eligible.filter(event=>!picked.includes(event))].slice(0,3);
+}
+
+export function calendarResultEvent(event:CalendarEvent){
+ if(event.status==='cancelled')return;
+ return [event,...(event.relatedEvents||[])].find(member=>{
+  const url=publicUrl(member.resultUrl);
+  return member.status==='published'&&url?.protocol==='https:'&&(member.sourceId!=='bls'||url.pathname.startsWith('/news.release/archives/'));
+ });
 }

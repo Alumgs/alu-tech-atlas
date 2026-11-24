@@ -23,10 +23,6 @@ function ics(raw:string,source:CalendarSource){
   const event=base({...source,timezone:m[7]?'UTC':zone},field('UID')||title+'|'+start,clean(title),`${m[1]}-${m[2]}-${m[3]}`,m[4]?`${m[4]}:${m[5]}`:'',field('URL')||source.url);
   const desc=field('DESCRIPTION');if(desc)event.summary=clean(desc).slice(0,1000);
   if(field('STATUS')==='CANCELLED')event.status='cancelled';
-  if(source.id==='bls'){
-   const slug=/Consumer Price Index/.test(title)?'cpi':/Employment Situation/.test(title)?'empsit':/Producer Price Index/.test(title)?'ppi':/Job Openings/.test(title)?'jolts':'';
-   if(slug)event.resultUrl=`https://www.bls.gov/news.release/${slug}.nr0.htm`;
-  }
   return [event];
  });
 }

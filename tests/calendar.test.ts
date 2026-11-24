@@ -5,8 +5,8 @@ import {readFileSync} from 'node:fs';
 import {calendarSources} from '../lib/calendar/sources.ts';
 import {parseCalendar,calendarEvent,lprWindow} from '../lib/calendar/parsers.ts';
 import {calendarWindow,localInstant,beijingDay} from '../lib/calendar/time.ts';
-import {saveEvents,listEvents} from '../worker/calendar/store.ts';
-import {nbsResultLink,resultEvidence} from '../worker/calendar/results.ts';
+import {saveCalendarResult,saveEvents,listEvents} from '../worker/calendar/store.ts';
+import {blsResultLink,nbsResultLink,resultEvidence} from '../worker/calendar/results.ts';
 const source=(id:string)=>calendarSources.find(s=>s.id===id)!;
 test('forward window is exactly seven Beijing days and archive has no rolling lower bound',()=>{
  assert.deepEqual(calendarWindow(null,'2026-11-16'),{from:'2026-11-16',to:'2026-11-22'});
@@ -96,4 +96,25 @@ test('market holiday and early close have distinct dates and only the close has 
  const [closed,early]=parseCalendar(raw,source('nyse'));
  assert.equal(closed.day,'2026-11-26');assert.equal(closed.startAt,undefined);
  assert.equal(early.day,'2026-11-28');assert.equal(early.originalDate,'2026-11-27 13:00');
+});
+
+test('verified release evidence survives refresh, but a stale verification cannot replace a rescheduled record',async()=>{
+ const {db,sql}=database();
+ try{
+  const sourceEvent=calendarEvent(source('bls'),'import-oct','U.S. Import and Export Price Indexes','2026-11-17','08:30');
+  await saveEvents(db,[sourceEvent],'2026-11-24T00:00:00Z');
+  const window=()=>listEvents(db,'2026-11-01','2026-11-30');
+  const original=(await window()).events[0];
+  assert.equal(original.status,'published');
+  assert.equal(original.resultUrl,blsResultLink(sourceEvent));
+  const moved=calendarEvent(source('bls'),sourceEvent.key,sourceEvent.title,'2026-11-18','08:30');
+  await saveEvents(db,[moved],'2026-11-24T00:01:00Z');
+  assert.equal(await saveCalendarResult(db,original,{result:'Stale evidence',resultUrl:original.resultUrl!,resultCheckedAt:'2026-11-24'},'2026-11-24T00:02:00Z'),false);
+  assert.equal((await window()).events[0].status,'scheduled');
+  const refreshed=(await window()).events[0];
+  const evidence={result:'Archived',resultUrl:blsResultLink(refreshed)!,resultCheckedAt:'2026-11-24'};
+  assert.equal(await saveCalendarResult(db,refreshed,evidence,'2026-11-24T00:03:00Z'),true);
+  await saveEvents(db,[moved],'2026-11-24T00:04:00Z');
+  assert.equal((await window()).events[0].resultUrl,evidence.resultUrl);
+ }finally{sql.close();}
 });
