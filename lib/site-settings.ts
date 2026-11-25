@@ -1,3 +1,10 @@
+export const SESSION_DAY_OPTIONS = [7, 30, 365] as const;
+export type SessionDays = typeof SESSION_DAY_OPTIONS[number];
+export const DEFAULT_SESSION_DAYS: SessionDays = 7;
+export function normalizeSessionDays(value: unknown): SessionDays {
+  return SESSION_DAY_OPTIONS.find(days => days === value) ?? DEFAULT_SESSION_DAYS;
+}
+
 export type SiteSettings = {
   siteTitle: string;
   tagline: string;
@@ -14,6 +21,7 @@ export type SiteSettings = {
   enableAIEnrichment: boolean;
   enableAutoTranslation: boolean;
   allowReaderFallback: boolean;
+  sessionDays: SessionDays;
 };
 
 export const defaultSiteSettings: SiteSettings = {
@@ -32,6 +40,7 @@ export const defaultSiteSettings: SiteSettings = {
   enableAIEnrichment: true,
   enableAutoTranslation: true,
   allowReaderFallback: true,
+  sessionDays: DEFAULT_SESSION_DAYS,
 };
 
 const text = (value: unknown, fallback: string, max: number) =>
@@ -58,5 +67,6 @@ export function sanitizeSiteSettings(value: unknown): SiteSettings {
     enableAIEnrichment: source.enableAIEnrichment!==false,
     enableAutoTranslation: typeof source.enableAutoTranslation==='boolean'?source.enableAutoTranslation:source.enableAIEnrichment!==false,
     allowReaderFallback: source.allowReaderFallback!==false,
+    sessionDays: normalizeSessionDays(source.sessionDays),
   };
 }

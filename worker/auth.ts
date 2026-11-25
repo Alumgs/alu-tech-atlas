@@ -1,6 +1,8 @@
+import {DEFAULT_SESSION_DAYS,SESSION_DAY_OPTIONS,normalizeSessionDays} from '../lib/site-settings.ts';
 const encoder=new TextEncoder();
 export const COOKIE='__Host-atlas_session';
-export const SESSION_SECONDS=7*24*60*60;
+export const sessionSeconds=(days:unknown)=>normalizeSessionDays(days)*86400;
+const MAX_SESSION_SECONDS=Math.max(...SESSION_DAY_OPTIONS)*86400;
 export type AuthEnv={ATLAS_PASSWORD_HASH?:string;ATLAS_SESSION_SECRET?:string};
 const hex=(bytes:ArrayBuffer)=>Array.from(new Uint8Array(bytes),b=>b.toString(16).padStart(2,'0')).join('');
 const unhex=(value:string)=>new Uint8Array(value.match(/../g)!.map(b=>parseInt(b,16)));
@@ -28,9 +30,9 @@ export async function hashPassword(password:string){
 async function key(env:AuthEnv){
  return crypto.subtle.importKey('raw',encoder.encode(env.ATLAS_SESSION_SECRET+':'+env.ATLAS_PASSWORD_HASH),{name:'HMAC',hash:'SHA-256'},false,['sign','verify']);
 }
-export async function issueSession(env:AuthEnv,now=Date.now()){
+export async function issueSession(env:AuthEnv,now=Date.now(),days=DEFAULT_SESSION_DAYS){
  if(!configured(env))throw new Error('Authentication is not configured');
- const payload=String(Math.floor(now/1000)+SESSION_SECONDS)+'.'+crypto.randomUUID();
+ const payload=String(Math.floor(now/1000)+sessionSeconds(days))+'.'+crypto.randomUUID();
  return payload+'.'+hex(await crypto.subtle.sign('HMAC',await key(env),encoder.encode(payload)));
 }
 export async function validSession(value:string,env:AuthEnv,now=Date.now()){
@@ -38,13 +40,13 @@ export async function validSession(value:string,env:AuthEnv,now=Date.now()){
  const parts=value.split('.');
  if(parts.length!==3||! /^\d{10}$/.test(parts[0])||! /^[-a-f0-9]{36}$/.test(parts[1])||! /^([a-f0-9]{64})$/.test(parts[2]))return false;
  const exp=Number(parts[0]),current=Math.floor(now/1000);
- if(exp<=current||exp>current+SESSION_SECONDS)return false;
+ if(exp<=current||exp>current+MAX_SESSION_SECONDS)return false;
  return crypto.subtle.verify('HMAC',await key(env),unhex(parts[2]),encoder.encode(parts[0]+'.'+parts[1]));
 }
 export function getCookie(request:Request){
  return (request.headers.get('Cookie')||'').split(';').map(v=>v.trim()).find(v=>v.startsWith(COOKIE+'='))?.slice(COOKIE.length+1)||'';
 }
-export function sessionCookie(value:string,age=SESSION_SECONDS){
+export function sessionCookie(value:string,age=sessionSeconds(DEFAULT_SESSION_DAYS)){
  return COOKIE+'='+value+'; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age='+age;
 }
 export function sameOrigin(request:Request){return request.headers.get('Origin')===new URL(request.url).origin;}

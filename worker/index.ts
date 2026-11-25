@@ -1,7 +1,7 @@
 import {calendarApi,scheduledCalendar,importBlsSnapshot,importVerifiedNotices} from './calendar/index';
 import handler from 'vinext/server/fetch-handler';
 import {translateText} from './translate';
-import {configured,verifyPassword,hashPassword,issueSession,validSession,getCookie,sessionCookie,sameOrigin,safeReturn,type AuthEnv} from './auth';
+import {configured,verifyPassword,hashPassword,issueSession,validSession,getCookie,sessionCookie,sessionSeconds,sameOrigin,safeReturn,type AuthEnv} from './auth';
 import {loginPage} from './login';
 import {defaultSiteSettings,sanitizeSiteSettings} from '../lib/site-settings';
 import {editorialEnrich,type EditorialEnv} from './editorial';
@@ -47,15 +47,18 @@ async function effectiveAuthEnv(env:Env):Promise<AuthEnv>{
 }
 const readBody=boundedJson;
 const json=(value:unknown,status=200,headers:HeadersInit={})=>Response.json(value,{status,headers:{'Cache-Control':'private, no-store',...Object.fromEntries(new Headers(headers))}});
+async function readSiteSettings(kv?:KVNamespace){
+ const raw=await kv?.get('public-settings');
+ if(raw){try{return sanitizeSiteSettings(JSON.parse(raw));}catch{}}
+ return defaultSiteSettings;
+}
 async function adminApi(request:Request,env:Env,authEnv:AuthEnv){
  const path=new URL(request.url).pathname,kv=env.ATLAS_SETTINGS;
  if(!kv)return json({error:'设置存储尚未配置，请检查 Cloudflare KV 绑定。'},503);
  if(request.method==='GET'&&path==='/api/admin/settings'){
   try{
-   const raw=await kv.get('public-settings');
-   let settings=defaultSiteSettings;
-   if(raw){try{settings=sanitizeSiteSettings(JSON.parse(raw));}catch{}}
-   return json({settings,sessionDays:7,storage:'cloudflare-kv'});
+   const settings=await readSiteSettings(kv);
+   return json({settings,sessionDays:settings.sessionDays,storage:'cloudflare-kv'});
   }catch{return json({error:'读取云端设置失败，请稍后重试。'},503);}
  }
  if(request.method!=='POST')return json({error:'请求方法不支持。'},405,{Allow:'GET, POST'});
@@ -68,8 +71,13 @@ async function adminApi(request:Request,env:Env,authEnv:AuthEnv){
  const current=typeof body.currentPassword==='string'?body.currentPassword:'';
  if(!await verifyPassword(current,authEnv.ATLAS_PASSWORD_HASH||''))return json({error:'请验证当前访问密码后再进行管理操作。'},403);
  if(path==='/api/admin/settings'){
-  const settings=sanitizeSiteSettings(body.settings);
-  try{await kv.put('public-settings',JSON.stringify(settings));return json({ok:true,settings});}
+  try{
+   const requested=body.settings&&typeof body.settings==='object'?body.settings:{};
+   const sessionDays='sessionDays' in requested?requested.sessionDays:(await readSiteSettings(kv)).sessionDays;
+   const settings=sanitizeSiteSettings({...requested,sessionDays});
+   await kv.put('public-settings',JSON.stringify(settings));
+   return json({ok:true,settings,sessionDays:settings.sessionDays});
+  }
   catch{return json({error:'保存设置失败，请检查 KV 存储权限或稍后重试。'},503);}
  }
  if(path==='/api/admin/password'){
@@ -89,7 +97,7 @@ async function adminApi(request:Request,env:Env,authEnv:AuthEnv){
  return json({error:'未知管理接口。'},404);
 }
 
-const html=(message='',target='/',status=200)=>new Response(loginPage(message,target),{status,headers:{'Content-Type':'text/html; charset=utf-8'}});
+const html=(message='',target='/',status=200,days=defaultSiteSettings.sessionDays)=>new Response(loginPage(message,target,days),{status,headers:{'Content-Type':'text/html; charset=utf-8'}});
 async function boundedForm(request:Request){
  if(!request.headers.get('Content-Type')?.startsWith('application/x-www-form-urlencoded'))throw Error('type');
  const reader=request.body?.getReader();if(!reader)throw Error('body');let bytes=0;let text='';const decoder=new TextDecoder();
@@ -104,19 +112,22 @@ export default {
   if(!['GET','HEAD'].includes(request.method)&&!sameOrigin(request))return protect(json({error:'请求来源不符。'},403));
   if(path==='/api/health'&&!['GET','HEAD'].includes(request.method))return protect(json({error:'仅支持 GET 或 HEAD。'},405,{Allow:'GET, HEAD'}));
   const authEnv=await effectiveAuthEnv(env);
-  if(path==='/api/health')return protect(Response.json({ok:true,service:'alu-tech-atlas',version:'4.6.4',release:env.ATLAS_RELEASE||'',platform:'cloudflare-workers',authConfigured:configured(authEnv),settingsStorage:Boolean(env.ATLAS_SETTINGS),calendarStorage:Boolean(env.CALENDAR_DB),sessionDays:7}));
+  const sessionDays=path==='/api/health'||path==='/auth/login'
+   ?(await readSiteSettings(env.ATLAS_SETTINGS).catch(()=>defaultSiteSettings)).sessionDays
+   :defaultSiteSettings.sessionDays;
+  if(path==='/api/health')return protect(Response.json({ok:true,service:'alu-tech-atlas',version:'4.6.5',release:env.ATLAS_RELEASE||'',platform:'cloudflare-workers',authConfigured:configured(authEnv),settingsStorage:Boolean(env.ATLAS_SETTINGS),calendarStorage:Boolean(env.CALENDAR_DB),sessionDays}));
   if(!configured(authEnv))return protect(new Response('网站正在完成访问配置，请稍后再试。',{status:503,headers:{'Content-Type':'text/plain; charset=utf-8'}}));
   if(path==='/auth/login'){
-   if(request.method==='GET')result=html('',safeReturn(url.searchParams.get('returnTo')));
+   if(request.method==='GET')result=html('',safeReturn(url.searchParams.get('returnTo')),200,sessionDays);
    else if(request.method==='POST'){
     if(!sameOrigin(request))return protect(new Response('请求来源不符',{status:403}));
     const limited=await env.LOGIN_LIMITER.limit({key:'atlas-login:'+ (request.headers.get('CF-Connecting-IP')||'unknown')});
     if(!limited.success)return protect(new Response('尝试过于频繁，请稍后重试。',{status:429,headers:{'Retry-After':'60'}}));
     try{
      const form=await boundedForm(request),password=form.get('password')||'',target=safeReturn(form.get('returnTo'));
-     if(!await verifyPassword(password,authEnv.ATLAS_PASSWORD_HASH!))result=html('密码不正确，请重试。',target,401);
-     else result=new Response(null,{status:303,headers:{Location:target,'Set-Cookie':sessionCookie(await issueSession(authEnv))}});
-    }catch{result=html('登录请求无效，请重新输入。','/',400);}
+     if(!await verifyPassword(password,authEnv.ATLAS_PASSWORD_HASH!))result=html('密码不正确，请重试。',target,401,sessionDays);
+     else result=new Response(null,{status:303,headers:{Location:target,'Set-Cookie':sessionCookie(await issueSession(authEnv,Date.now(),sessionDays),sessionSeconds(sessionDays))}});
+    }catch{result=html('登录请求无效，请重新输入。','/',400,sessionDays);}
    }else result=new Response('Method not allowed',{status:405,headers:{Allow:'GET, POST'}});
   }else if(path==='/auth/logout'){
    if(request.method!=='POST')result=new Response('Method not allowed',{status:405});

@@ -11,7 +11,7 @@ for(let attempt=1;attempt<=6;attempt++){
  if(attempt===6)throw Error('health endpoint invalid: status='+health.status+', content-type='+contentType+', location='+String(health.headers.get('location')));
  await new Promise(r=>setTimeout(r,1500));
 }
-must(info?.ok&&info?.authConfigured&&info?.version==='4.6.4'&&info?.settingsStorage,'health, auth or KV settings configuration failed');
+must(info?.ok&&info?.authConfigured&&info?.version==='4.6.5'&&info?.settingsStorage,'health, auth or KV settings configuration failed');
 for(const path of ['/','/calendar','/settings','/case-study','/read/a04','/aidc.jpg']){
  const r=await request(path);
  must(r.status===302&&r.headers.get('location')?.startsWith('/auth/login'),'anonymous path is not protected: '+path);
@@ -33,7 +33,7 @@ if(process.env.ATLAS_ACCESS_PASSWORD){
   const cookieLines=typeof login.headers.getSetCookie==='function'?login.headers.getSetCookie():[login.headers.get('set-cookie')||''];
   const loginCookie=cookieLines.find(v=>v.trim().startsWith('__Host-atlas_session='));
   must(loginCookie,'session cookie missing');
-  must(loginCookie.includes('Max-Age=604800'),'session cookie is not configured for seven days');
+  must(loginCookie.includes('Max-Age='+info.sessionDays*86400),'session cookie does not match the saved login duration');
   const cookie=loginCookie.split(';')[0];
   for(const [path,marker] of [['/','知域'],['/case-study','1 MW'],['/read/a04','液冷'],['/?view=world','世界热点']]){
    const r=await request(path,{headers:{Cookie:cookie}});
@@ -46,7 +46,7 @@ if(process.env.ATLAS_ACCESS_PASSWORD){
   const settingsHtml=await settingsPortal.text();must(settingsPortal.ok&&settingsHtml.includes('settings-nav-link')&&settingsHtml.includes('source-picker-trigger'),'settings and multi-source entry points missing');
   const admin=await request('/api/admin/settings',{headers:{Cookie:cookie}});
   const settings=await admin.json();
-  must(admin.ok&&settings.settings&&settings.sessionDays===7&&settings.storage==='cloudflare-kv'&&typeof settings.settings.enableAutoTranslation==='boolean','admin settings API contract failed');
+  must(admin.ok&&settings.settings&&[7,30,365].includes(settings.sessionDays)&&settings.sessionDays===settings.settings.sessionDays&&settings.storage==='cloudflare-kv'&&typeof settings.settings.enableAutoTranslation==='boolean','admin settings API contract failed');
   const noReauth=await request('/api/admin/settings',{method:'POST',headers:{Cookie:cookie,Origin:origin,'Content-Type':'application/json'},body:JSON.stringify({settings:settings.settings})});
   must(noReauth.status===403,'settings mutation accepted without current-password confirmation');
   const home=await request('/',{headers:{Cookie:cookie}});
@@ -130,4 +130,4 @@ if(process.env.ATLAS_ACCESS_PASSWORD){
   must(logout.status===303&&logout.headers.get('set-cookie')?.includes('Max-Age=0'),'logout failed');
  }
 }
-console.log('Atlas smoke tests passed: health, KV binding, login entry, protected routes, seven-day sessions and admin settings checks when credential is current.');
+console.log('Atlas smoke tests passed: health, KV binding, login entry, protected routes, configured sessions and admin settings checks when credential is current.');

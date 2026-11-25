@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {pbkdf2Sync} from 'node:crypto';
-import {configured,verifyPassword,hashPassword,issueSession,validSession,getCookie,sessionCookie,safeReturn,sameOrigin} from '../worker/auth.ts';
+import {configured,verifyPassword,hashPassword,issueSession,validSession,getCookie,sessionCookie,sessionSeconds,safeReturn,sameOrigin} from '../worker/auth.ts';
 const password='test-only-not-a-real-password';const salt='0123456789abcdef0123456789abcdef';
 const env={ATLAS_PASSWORD_HASH:'pbkdf2-sha256$100000$'+salt+'$'+pbkdf2Sync(password,Buffer.from(salt,'hex'),100000,32,'sha256').toString('hex'),ATLAS_SESSION_SECRET:'test-only-session-secret-never-used-in-production'};
 test('missing secrets fail closed',()=>{assert.equal(configured({}),false);assert.equal(configured({...env,ATLAS_SESSION_SECRET:'short'}),false);assert.equal(configured(env),true);});
@@ -16,4 +16,16 @@ test('encoded return paths and malformed password records fail safely',async()=>
  for(const path of ['/%5c%5cevil.test','/%255c%255cevil.test','/%0d%0aevil','/%00','/%zz'])assert.equal(safeReturn(path),'/');
  for(const value of ['pbkdf2-sha256$100000$x$00','pbkdf2-sha256$100000$aa$xx'])assert.equal(await verifyPassword(password,value),false);
  await assert.rejects(()=>issueSession({}));
+});
+
+test('selected login duration applies to both the signed expiry and the cookie',async()=>{
+ const now=1791330000000;
+ for(const days of [7,30,365] as const){
+  const token=await issueSession(env,now,days);
+  const seconds=days*86400;
+  assert.equal(Number(token.split('.')[0]),now/1000+seconds);
+  assert.equal(await validSession(token,env,now+seconds*1000-1),true);
+  assert.equal(await validSession(token,env,now+seconds*1000),false);
+  assert.ok(sessionCookie(token,sessionSeconds(days)).endsWith('Max-Age='+seconds));
+ }
 });

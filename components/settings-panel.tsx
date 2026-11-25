@@ -1,10 +1,11 @@
 'use client';
-import {Localized} from '@/components/language';
+import {Localized,useLanguage} from '@/components/language';
 import {useEffect,useState,useRef} from 'react';
 import {KeyRound,Palette,Save,SlidersHorizontal,LogOut} from 'lucide-react';
-import {defaultSiteSettings,sanitizeSiteSettings,type SiteSettings} from '@/lib/site-settings';
+import {defaultSiteSettings,normalizeSessionDays,sanitizeSiteSettings,type SiteSettings} from '@/lib/site-settings';
 
 export function SettingsPanel({initialSettings,settingsState,onRetry,onSaved}:{initialSettings:SiteSettings;settingsState:'loading'|'ready'|'error';onRetry:()=>void;onSaved:(settings:SiteSettings)=>void}){
+  const {t}=useLanguage();
   const [settings,setSettings]=useState(initialSettings);
   const passwordInput=useRef<HTMLInputElement>(null);
   const [passwordError,setPasswordError]=useState('');
@@ -103,7 +104,11 @@ export function SettingsPanel({initialSettings,settingsState,onRetry,onSaved}:{i
     </section>
 
     <section className="settings-card settings-save-card">
-      <h2><Localized value="保存网站配置"/></h2><p><Localized value="上方网站内容、默认样式与精选配置一并保存。输入当前访问密码以确认管理操作。"/></p>
+      <h2><Localized value="保存网站配置"/></h2><p><Localized value="输入当前访问密码以保存网站配置与登录有效期。"/></p>
+      <div className="settings-form-grid"><label><span>{t('登录有效期','Login duration')}</span><select value={settings.sessionDays} onChange={e=>update('sessionDays',normalizeSessionDays(Number(e.target.value)))}>
+        <option value={7}>{t('7 天','7 days')}</option><option value={30}>{t('1 个月（30 天）','1 month (30 days)')}</option><option value={365}>{t('1 年（365 天）','1 year (365 days)')}</option>
+      </select></label></div>
+      <p>{t('保存后对新登录生效。','Applies to new sign-ins after saving.')}</p>
       <label className="settings-password"><span><Localized value="当前访问密码"/></span><input ref={passwordInput} type="password" maxLength={256} autoComplete="current-password" value={currentPassword} aria-invalid={Boolean(passwordError)} aria-describedby={passwordError?'settings-password-error':undefined} onChange={e=>{setCurrentPassword(e.target.value);setPasswordError('');}}/></label>
       {passwordError&&<p className="settings-error" id="settings-password-error" role="alert"><Localized value={passwordError}/></p>}
       <div className="settings-actions"><button className="settings-primary" onClick={saveSettings} disabled={saving}><Save size={16}/><Localized value={saving?'正在保存…':'保存网站设置'}/></button><button onClick={()=>setSettings(defaultSiteSettings)}><Localized value="恢复网站默认值"/></button></div>
@@ -119,6 +124,6 @@ export function SettingsPanel({initialSettings,settingsState,onRetry,onSaved}:{i
       <div className="settings-actions"><button className="settings-primary" disabled={saving} onClick={changePassword}><KeyRound size={16}/><Localized value={"修改密码并退出其他设备"}/> </button><button className="settings-danger" disabled={saving} onClick={logoutAll}><LogOut size={16}/><Localized value={"退出所有设备"}/> </button></div>
     </section>
     </fieldset>
-    <p className="settings-footnote"><Localized value={"本站采用共享访问密码，管理操作需再次输入密码，请仅分享给信任的人。登录最长有效 7 天；密码与会话密钥以单条云端记录更新，全球节点撤销通常在一分钟内完成。密码哈希不会发送到浏览器。"}/> </p>
+    <p className="settings-footnote"><Localized value={"本站采用共享访问密码，管理操作需再次输入密码，请仅分享给信任的人。密码与会话密钥以单条云端记录更新，全球节点撤销通常在一分钟内完成。密码哈希不会发送到浏览器。"}/> </p>
   </div>;
 }
