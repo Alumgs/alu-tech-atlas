@@ -105,7 +105,7 @@ export function SettingsPanel({initialSettings,settingsState,onRetry,onSaved}:{i
 
     <section className="settings-card settings-save-card">
       <h2><Localized value="保存网站配置"/></h2><p><Localized value="输入当前访问密码以保存网站配置与登录有效期。"/></p>
-      <div className="settings-form-grid"><label><span>{t('登录有效期','Login duration')}</span><select value={settings.sessionDays} onChange={e=>update('sessionDays',normalizeSessionDays(Number(e.target.value)))}>
+      <div className="settings-form-grid"><label><span id="site-session-days-label">{t('登录有效期','Login duration')}</span><select aria-labelledby="site-session-days-label" value={settings.sessionDays} onChange={e=>update('sessionDays',normalizeSessionDays(Number(e.target.value)))}>
         <option value={7}>{t('7 天','7 days')}</option><option value={30}>{t('1 个月（30 天）','1 month (30 days)')}</option><option value={365}>{t('1 年（365 天）','1 year (365 days)')}</option>
       </select></label></div>
       <p>{t('保存后对新登录生效。','Applies to new sign-ins after saving.')}</p>
